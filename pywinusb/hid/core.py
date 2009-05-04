@@ -18,12 +18,13 @@ INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 usageEvents = [
     HID_EVT_NONE,
+    HID_EVT_ALL,
     HID_EVT_CHANGED,
     HID_EVT_PRESSED,
     HID_EVT_RELEASED,
     HID_EVT_SET,
     HID_EVT_CLEAR,
-] = range(6)
+] = range(7)
 
 def getFullUsageId(pageId, usageId):
     return (pageId << 16) | usageId
@@ -452,7 +453,7 @@ class HidDevice(HidDeviceBaseClass):
         self.__evtHandlers = dict()
 
     def isPlugged(self):
-        return self.devicePath and devicePathIsValid(self.devicePath)
+        return self.devicePath and hidDevicePathExists(self.devicePath)
 
     def isOpened(self):
         return self.__openStatus
@@ -980,7 +981,8 @@ class HidDevice(HidDeviceBaseClass):
     maxInputQueueSize = 20
     evt_decision = {
         #a=oldValue, b=newValue
-        HID_EVT_NONE: False ,
+        HID_EVT_NONE:       lambda a,b: False,
+        HID_EVT_ALL:        lambda a,b: True, #usage in report
         HID_EVT_CHANGED:    lambda a,b: a != b,
         HID_EVT_PRESSED:    lambda a,b: b and not a,
         HID_EVT_RELEASED:   lambda a,b: a and not b,
@@ -995,7 +997,7 @@ class HidDevice(HidDeviceBaseClass):
         if not self.__evtHandlers or not self.isOpened():
             return
 
-        if not rawReport[0] and not devicePathIsValid(self.devicePath):
+        if not rawReport[0] and not hidDevicePathExists(self.devicePath):
             #windows XP sends empty report when disconnecting
             self.Close() #device disconnected
             return
@@ -1031,7 +1033,7 @@ class HidDevice(HidDeviceBaseClass):
                 return reportId
         return 0
 
-    def addEventHandler(self, fullUsageId, handlerFunction, eventType = HID_EVT_CHANGED):
+    def addEventHandler(self, fullUsageId, handlerFunction, eventType = HID_EVT_ALL):
         "Add event handler for usage value/button changes"
         if not self.findInputUsage(fullUsageId):
             #do not add handler
