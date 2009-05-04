@@ -53,7 +53,7 @@ def hidDevicePathExists(devicePath, hidGuid = GetHidGuid()):
 
         devIndex = 0
         requiredSize = c_ulong()
-        while setupapiDLL.SetupDiEnumDeviceInterfaces(hInfo, None, byref(guid), devIndex, byref(deviceInterface)):
+        while setupapiDLL.SetupDiEnumDeviceInterfaces(hInfo, None, byref(hidGuid), devIndex, byref(deviceInterface)):
             devIndex += 1
 
             # validate if hid path would fit
