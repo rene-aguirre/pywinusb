@@ -5,7 +5,7 @@ README = os.path.join(os.path.dirname(__file__), 'README.txt')
 long_description = open(README).read() + 'nn'
 setup(name='pywinusb',
       version = VERSION,
-      description=("A package that simplifies USB HID communications on windows"),
+      description=("A package that simplifies USB/HID communications on windows"),
       long_description=long_description,
       classifiers=[
         "Development Status :: 3 - Alpha",
