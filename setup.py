@@ -31,7 +31,7 @@ setup(name='pywinusb',
       package_data = {
         #other files
         '':['README.txt', 'LICENSE.txt'],
-        }
+        },
       namespace_packages=['pywinusb'],
       install_requires=[]
       )
