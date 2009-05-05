@@ -22,7 +22,7 @@ Advantages
 
  * All python code, using ctypes
  
- * Top level handling of HID events (usage events calling _hook handlers_)
+ * Top level handling of HID events (usage events calling hook function handlers)
 
 Current limitations
 -------------------
@@ -39,7 +39,7 @@ Installation Instructions
 -------------------------
 
 Windows
-=======
+-------
 
 No package releases yet.  For now you can access the code using `from the svn repository`_.
 
@@ -49,7 +49,7 @@ implementation before attempting any of the pywinusb.winusb stuff.
 .. _from the svn repository: http://code.google.com/p/pywinusb/source/checkout
 
 Other
-=====
+-----
 
 So far only Windows OS it's supported.
 
@@ -66,7 +66,7 @@ found on the `main project code page`_.
 .. _main project code page: http://code.google.com/p/pywinusb
 
 Utilities
-=========
+---------
 
 More on this later... 
 

@@ -28,6 +28,10 @@ setup(name='pywinusb',
       url='http://code.google.com/p/pywinusb',
       license='BSD',
       packages=find_packages(),
+      package_data = {
+        #other files
+        '':['README.txt', 'LICENSE.txt'],
+        }
       namespace_packages=['pywinusb'],
       install_requires=[]
       )
