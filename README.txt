@@ -86,3 +86,4 @@ ideas or spare time, `feel free to donate`_.
 
 .. _main code project page: http://code.google.com/p/pywinusb
 .. _feel free to donate: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=4640085
+
