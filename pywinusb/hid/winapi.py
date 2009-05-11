@@ -1,16 +1,17 @@
 #
 import ctypes
-from ctypes import Structure, Union, c_byte, c_char, c_int, c_long, c_ulong, c_ushort, c_wchar
-from ctypes import pointer, byref, sizeof, POINTER
-from ctypes.wintypes import c_char, ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE
-from helpers import InspectStruct
+from ctypes import Structure, Union, c_byte, c_char, c_long, c_ulong, c_ushort, c_wchar
+from ctypes import byref, POINTER
+from ctypes.wintypes import c_char, ULONG, BOOLEAN, BYTE, WORD, DWORD
+#from core import HIDError
+from helpers import HIDError, InspectStruct
 
 def os_supports_unicode():
     return False
     
 #dll references
-setupapiDLL         = ctypes.windll.setupapi
-hidDll              = ctypes.windll.hid
+setup_api         = ctypes.windll.setupapi
+hid_dll              = ctypes.windll.hid
 kernel32            = ctypes.windll.kernel32
 
 #os independent functions
@@ -19,68 +20,66 @@ WriteFile           = kernel32.WriteFile
 CloseHandle         = kernel32.CloseHandle
 SetEvent            = kernel32.SetEvent
 WaitForSingleObject = kernel32.WaitForSingleObject
-#SetupDiGetDeviceInstanceId = setupapiDLL.SetupDiGetDeviceInstanceId
+#SetupDiGetDeviceInstanceId = setup_api.SetupDiGetDeviceInstanceId
 
 #os dependant functions and definitions
 if not os_supports_unicode():
     c_tchar = c_char
-    SetupDiGetDeviceInterfaceDetail = setupapiDLL.SetupDiGetDeviceInterfaceDetailA
-    SetupDiGetDeviceInstanceId      = setupapiDLL.SetupDiGetDeviceInstanceIdA
-    SetupDiGetClassDevs = setupapiDLL.SetupDiGetClassDevsA
-    CM_Get_Device_ID    = setupapiDLL.CM_Get_Device_IDA
+    SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailA
+    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdA
+    SetupDiGetClassDevs = setup_api.SetupDiGetClassDevsA
+    CM_Get_Device_ID    = setup_api.CM_Get_Device_IDA
     CreateFile          = kernel32.CreateFileA
     CreateEvent         = kernel32.CreateEventA
 else:
     c_tchar = c_wchar
-    SetupDiGetDeviceInterfaceDetail = setupapiDLL.SetupDiGetDeviceInterfaceDetailW
-    SetupDiGetDeviceInstanceId      = setupapiDLL.SetupDiGetDeviceInstanceIdA
-    SetupDiGetClassDevs = setupapiDLL.SetupDiGetClassDevsW
-    CM_Get_Device_ID    = setupapiDLL.CM_Get_Device_IDW
+    SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailW
+    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdA
+    SetupDiGetClassDevs = setup_api.SetupDiGetClassDevsW
+    CM_Get_Device_ID    = setup_api.CM_Get_Device_IDW
     CreateFile          = kernel32.CreateFileW
     CreateEvent         = kernel32.CreateEventW
 
 
-bVerbose = True
-usbVerbose = False
-class HIDError(Exception):
-    pass
+b_verbose = True
+usb_verbose = False
     
 #structures for ctypes
 class GUID(Structure):
-    _fields_ = [("Data1", DWORD),
-                ("Data2", WORD),
-                ("Data3", WORD),
-                ("Data4", BYTE * 8)]
+    _fields_ = [("data1", DWORD),
+                ("data2", WORD),
+                ("data3", WORD),
+                ("data4", BYTE * 8)]
 
 class OVERLAPPED(Structure):
     _fields_ = [
-        ("Internal", c_ulong),
-        ("InternalHigh", c_ulong),
-        ("Offset", c_ulong),
-        ("OffsetHigh", c_ulong),
-        ("hEvent", c_ulong)
+        ("internal", c_ulong),
+        ("internal_high", c_ulong),
+        ("offset", c_ulong),
+        ("offset_high", c_ulong),
+        ("h_event", c_ulong)
     ]
     
 #**************
 # SetupApi.dll
 class SP_DEVICE_INTERFACE_DATA(Structure):
-    _fields_ = [("cbSize", c_ulong),
-        ("InterfaceClassGuid", GUID),
-        ("Flags", c_ulong),
-        ("Reserved", POINTER(ULONG))
+    _fields_ = [("cb_size", c_ulong),
+        ("interface_class_guid", GUID),
+        ("flags", c_ulong),
+        ("reserved", POINTER(ULONG))
     ]
 
 MAX_SP_DEV_INTERF_DETAIL_SIZE = 512
 class SP_DEVICE_INTERFACE_DETAIL_DATA(Structure):
-    _fields_ = [("cbSize", DWORD),
-        ("DevicePath", c_tchar * MAX_SP_DEV_INTERF_DETAIL_SIZE)
+    _fields_ = [("cb_size", DWORD),
+        ("device_path", c_tchar * MAX_SP_DEV_INTERF_DETAIL_SIZE)
     ]
 
 class SP_DEVINFO_DATA(Structure):
-    _fields_ = [("cbSize", DWORD),
-        ("ClassGuid", GUID),
-        ("DevInst", DWORD),
-        ("Reserved", POINTER(ULONG)),
+    _fields_ = [("cb_size", DWORD),
+        ("class_guid", GUID),
+        ("dev_inst", DWORD),
+        ("reserved", POINTER(ULONG)),
     ]
     
 # Flags controlling what is included in the device information set built
@@ -94,67 +93,67 @@ DIGCF_DEVICEINTERFACE = 0x00000010
 #*******
 # hid.dll
 class HIDD_ATTRIBUTES(Structure):
-    _fields_ = [("cbSize", DWORD),
-        ("VendorId", c_ushort),
-        ("ProductId", c_ushort),
-        ("VersionNumber", c_ushort)
+    _fields_ = [("cb_size", DWORD),
+        ("vendor_id", c_ushort),
+        ("product_id", c_ushort),
+        ("version_number", c_ushort)
     ]
 
 class HIDP_CAPS(Structure):
     _fields_ = [
-        ("Usage", c_ushort), #usage id
-        ("UsagePage", c_ushort), #usage page
-        ("InputReportByteLength", c_ushort),
-        ("OutputReportByteLength", c_ushort),
-        ("FeatureReportByteLength", c_ushort),
-        ("Reserved", c_ushort * 17),
-        ("NumberLinkCollectionNodes", c_ushort),
-        ("NumberInputButtonCaps", c_ushort),
-        ("NumberInputValueCaps", c_ushort),
-        ("NumberInputDataIndices", c_ushort),
-        ("NumberOutputButtonCaps", c_ushort),
-        ("NumberOutputValueCaps", c_ushort),
-        ("NumberOutputDataIndices", c_ushort),
-        ("NumberFeatureButtonCaps", c_ushort),
-        ("NumberFeatureValueCaps", c_ushort),
-        ("NumberFeatureDataIndices", c_ushort)
+        ("usage", c_ushort), #usage id
+        ("usage_page", c_ushort), #usage page
+        ("input_report_byte_length", c_ushort),
+        ("output_report_byte_length", c_ushort),
+        ("feature_report_byte_length", c_ushort),
+        ("reserved", c_ushort * 17),
+        ("number_link_collection_nodes", c_ushort),
+        ("number_input_button_caps", c_ushort),
+        ("number_input_value_caps", c_ushort),
+        ("number_input_data_indices", c_ushort),
+        ("number_output_button_caps", c_ushort),
+        ("number_output_value_caps", c_ushort),
+        ("number_output_data_indices", c_ushort),
+        ("number_feature_button_caps", c_ushort),
+        ("number_feature_value_caps", c_ushort),
+        ("number_feature_data_indices", c_ushort)
     ]
 
 class HIDP_BUTTON_CAPS(Structure):
     class RANGE_NOT_RANGE(Union):
         class RANGE(Structure):
             _fields_ = [
-                ("UsageMin", c_ushort),     ("UsageMax", c_ushort),
-                ("StringMin", c_ushort),    ("StringMax", c_ushort),
-                ("DesignatorMin", c_ushort),("DesignatorMax", c_ushort),
-                ("DataIndexMin", c_ushort), ("DataIndexMax", c_ushort)
+                ("usage_min", c_ushort),     ("usage_max", c_ushort),
+                ("string_min", c_ushort),    ("string_max", c_ushort),
+                ("designator_min", c_ushort),("designator_max", c_ushort),
+                ("data_index_min", c_ushort), ("data_indexMax", c_ushort)
             ]
 
         class NOT_RANGE(Structure):
             _fields_ = [
-                ("Usage", c_ushort),            ("Reserved1", c_ushort),
-                ("StringIndex", c_ushort),      ("Reserved2", c_ushort),
-                ("DesignatorIndex", c_ushort),  ("Reserved3", c_ushort),
-                ("DataIndex", c_ushort),        ("Reserved4", c_ushort)
+                ("usage", c_ushort),            ("reserved1", c_ushort),
+                ("string_index", c_ushort),      ("reserved2", c_ushort),
+                ("designator_index", c_ushort),  ("reserved3", c_ushort),
+                ("data_index", c_ushort),        ("reserved4", c_ushort)
             ]
         _fields_ = [
-            ("Range", RANGE),
-            ("NotRange", NOT_RANGE)
+            ("range", RANGE),
+            ("not_range", NOT_RANGE)
         ]
 
     _fields_ = [
-        ("UsagePage", c_ushort),
-        ("ReportID", c_byte),
-        ("IsAlias", BOOLEAN),
-        ("BitField", c_ushort),
-        ("LinkCollection", c_ushort),
-        ("LinkUsage", c_ushort),
-        ("LinkUsagePage", c_ushort),
-        ("IsRange", BOOLEAN),
-        ("IsStringRange", BOOLEAN),
-        ("IsDesignatorRange", BOOLEAN),
-        ("IsAbsolute", BOOLEAN),
-        ("Reserved", c_ulong * 10),
+        ("usage_page", c_ushort),
+        ("report_id", c_byte),
+        ("is_alias", BOOLEAN),
+        ("bit_field", c_ushort),
+        ("link_collection", c_ushort),
+        ("link_usage", c_ushort),
+        ("link_usage_page", c_ushort),
+        ("is_range", BOOLEAN),
+        ("is_string_range", BOOLEAN),
+        ("is_designator_range", BOOLEAN),
+        ("is_absolute", BOOLEAN),
+        ("reserved", c_ulong * 10),
         ("union", RANGE_NOT_RANGE)
     ]
     def InspectStruct(self):
@@ -167,47 +166,47 @@ class HIDP_VALUE_CAPS(Structure):
     class RANGE_NOT_RANGE(Union):
         class RANGE(Structure):
             _fields_ = [
-                ("UsageMin", c_ushort),     ("UsageMax", c_ushort),
-                ("StringMin", c_ushort),    ("StringMax", c_ushort),
-                ("DesignatorMin", c_ushort),("DesignatorMax", c_ushort),
-                ("DataIndexMin", c_ushort), ("DataIndexMax", c_ushort)
+                ("usage_min", c_ushort),     ("usage_max", c_ushort),
+                ("string_min", c_ushort),    ("string_max", c_ushort),
+                ("designator_min", c_ushort),("designator_max", c_ushort),
+                ("data_index_min", c_ushort), ("data_indexMax", c_ushort)
             ]
 
         class NOT_RANGE(Structure):
             _fields_ = [
-                ("Usage", c_ushort),            ("Reserved1", c_ushort),
-                ("StringIndex", c_ushort),      ("Reserved2", c_ushort),
-                ("DesignatorIndex", c_ushort),  ("Reserved3", c_ushort),
-                ("DataIndex", c_ushort),        ("Reserved4", c_ushort)
+                ("usage", c_ushort),            ("reserved1", c_ushort),
+                ("string_index", c_ushort),      ("reserved2", c_ushort),
+                ("designator_index", c_ushort),  ("reserved3", c_ushort),
+                ("data_index", c_ushort),        ("reserved4", c_ushort)
             ]
         _fields_ = [
-            ("Range", RANGE),
-            ("NotRange", NOT_RANGE)
+            ("range", RANGE),
+            ("not_range", NOT_RANGE)
         ]
         
     _fields_ = [
-        ("UsagePage", c_ushort),
-        ("ReportID", c_byte),
-        ("IsAlias", BOOLEAN),
-        ("BitField", c_ushort),
-        ("LinkCollection", c_ushort),
-        ("LinkUsage", c_ushort),
-        ("LinkUsagePage", c_ushort),
-        ("IsRange", BOOLEAN),
-        ("IsStringRange", BOOLEAN),
-        ("IsDesignatorRange", BOOLEAN),
-        ("IsAbsolute", BOOLEAN),
-        ("HasNull", BOOLEAN),
-        ("Reserved", c_byte),
-        ("BitSize", c_ushort),
-        ("ReportCount", c_ushort),
-        ("Reserved2", c_ushort * 5),
-        ("UnitsExp", c_ulong),
-        ("Units", c_ulong),
-        ("LogicalMin", c_long),
-        ("LogicalMax", c_long),
-        ("PhysicalMin", c_long),
-        ("PhysicalMax", c_long),
+        ("usage_page", c_ushort),
+        ("report_id", c_byte),
+        ("is_alias", BOOLEAN),
+        ("bit_field", c_ushort),
+        ("link_collection", c_ushort),
+        ("link_usage", c_ushort),
+        ("link_usage_page", c_ushort),
+        ("is_range", BOOLEAN),
+        ("is_string_range", BOOLEAN),
+        ("is_designator_range", BOOLEAN),
+        ("is_absolute", BOOLEAN),
+        ("has_null", BOOLEAN),
+        ("reserved", c_byte),
+        ("bit_size", c_ushort),
+        ("report_count", c_ushort),
+        ("reserved2", c_ushort * 5),
+        ("units_exp", c_ulong),
+        ("units", c_ulong),
+        ("logical_min", c_long),
+        ("logical_max", c_long),
+        ("physical_min", c_long),
+        ("physical_max", c_long),
         ("union", RANGE_NOT_RANGE)
     ]
     def InspectStruct(self):
@@ -219,14 +218,14 @@ class HIDP_VALUE_CAPS(Structure):
 class HIDP_DATA(Structure):
     class HIDP_DATA_VALUE(Union):
         _fields_ = [
-            ("RawValue", c_ulong),
-            ("On", BOOLEAN),
+            ("raw_value", c_ulong),
+            ("on", BOOLEAN),
         ]
 
     _fields_ = [
-        ("DataIndex", c_ushort),
-        ("Reserved", c_ushort),
-        ("Value", HIDP_DATA_VALUE)
+        ("data_index", c_ushort),
+        ("reserved", c_ushort),
+        ("value", HIDP_DATA_VALUE)
     ]
 
 #get report
@@ -235,60 +234,60 @@ HidP_Output  = 0x0001
 HidP_Feature = 0x0002
 
 FACILITY_HID_ERROR_CODE = 0x11
-def HIDP_ERROR_CODES(SEV, CODE):
-    return (((SEV) << 28) | (FACILITY_HID_ERROR_CODE << 16) | (CODE)) & 0xFFFFFFFF
+def HIDP_ERROR_CODES(sev, code):
+    return (((sev) << 28) | (FACILITY_HID_ERROR_CODE << 16) | (code)) & 0xFFFFFFFF
 
-class HIDP_STATUS(object):
-    HIDP_STATUS_SUCCESS                  = (HIDP_ERROR_CODES(0x0,0))
-    HIDP_STATUS_NULL                     = (HIDP_ERROR_CODES(0x8,1))
-    HIDP_STATUS_INVALID_PREPARSED_DATA   = (HIDP_ERROR_CODES(0xC,1))
-    HIDP_STATUS_INVALID_REPORT_TYPE      = (HIDP_ERROR_CODES(0xC,2))
-    HIDP_STATUS_INVALID_REPORT_LENGTH    = (HIDP_ERROR_CODES(0xC,3))
-    HIDP_STATUS_USAGE_NOT_FOUND          = (HIDP_ERROR_CODES(0xC,4))
-    HIDP_STATUS_VALUE_OUT_OF_RANGE       = (HIDP_ERROR_CODES(0xC,5))
-    HIDP_STATUS_BAD_LOG_PHY_VALUES       = (HIDP_ERROR_CODES(0xC,6))
-    HIDP_STATUS_BUFFER_TOO_SMALL         = (HIDP_ERROR_CODES(0xC,7))
-    HIDP_STATUS_INTERNAL_ERROR           = (HIDP_ERROR_CODES(0xC,8))
-    HIDP_STATUS_I8042_TRANS_UNKNOWN      = (HIDP_ERROR_CODES(0xC,9))
-    HIDP_STATUS_INCOMPATIBLE_REPORT_ID   = (HIDP_ERROR_CODES(0xC,0xA))
-    HIDP_STATUS_NOT_VALUE_ARRAY          = (HIDP_ERROR_CODES(0xC,0xB))
-    HIDP_STATUS_IS_VALUE_ARRAY           = (HIDP_ERROR_CODES(0xC,0xC))
-    HIDP_STATUS_DATA_INDEX_NOT_FOUND     = (HIDP_ERROR_CODES(0xC,0xD))
-    HIDP_STATUS_DATA_INDEX_OUT_OF_RANGE  = (HIDP_ERROR_CODES(0xC,0xE))
-    HIDP_STATUS_BUTTON_NOT_PRESSED       = (HIDP_ERROR_CODES(0xC,0xF))
-    HIDP_STATUS_REPORT_DOES_NOT_EXIST    = (HIDP_ERROR_CODES(0xC,0x10))
-    HIDP_STATUS_NOT_IMPLEMENTED          = (HIDP_ERROR_CODES(0xC,0x20))
+class HidStatus(object):
+    HIDP_STATUS_SUCCESS                  = ( HIDP_ERROR_CODES(0x0, 0) )
+    HIDP_STATUS_NULL                     = ( HIDP_ERROR_CODES(0x8, 1) )
+    HIDP_STATUS_INVALID_PREPARSED_DATA   = ( HIDP_ERROR_CODES(0xC, 1) )
+    HIDP_STATUS_INVALID_REPORT_TYPE      = ( HIDP_ERROR_CODES(0xC, 2) )
+    HIDP_STATUS_INVALID_REPORT_LENGTH    = ( HIDP_ERROR_CODES(0xC, 3) )
+    HIDP_STATUS_USAGE_NOT_FOUND          = ( HIDP_ERROR_CODES(0xC, 4) )
+    HIDP_STATUS_VALUE_OUT_OF_RANGE       = ( HIDP_ERROR_CODES(0xC, 5) )
+    HIDP_STATUS_BAD_LOG_PHY_VALUES       = ( HIDP_ERROR_CODES(0xC, 6) )
+    HIDP_STATUS_BUFFER_TOO_SMALL         = ( HIDP_ERROR_CODES(0xC, 7) )
+    HIDP_STATUS_INTERNAL_ERROR           = ( HIDP_ERROR_CODES(0xC, 8) )
+    HIDP_STATUS_I8042_TRANS_UNKNOWN      = ( HIDP_ERROR_CODES(0xC, 9) )
+    HIDP_STATUS_INCOMPATIBLE_REPORT_ID   = ( HIDP_ERROR_CODES(0xC, 0xA) )
+    HIDP_STATUS_NOT_VALUE_ARRAY          = ( HIDP_ERROR_CODES(0xC, 0xB) )
+    HIDP_STATUS_IS_VALUE_ARRAY           = ( HIDP_ERROR_CODES(0xC, 0xC) )
+    HIDP_STATUS_DATA_INDEX_NOT_FOUND     = ( HIDP_ERROR_CODES(0xC, 0xD) )
+    HIDP_STATUS_DATA_INDEX_OUT_OF_RANGE  = ( HIDP_ERROR_CODES(0xC, 0xE) )
+    HIDP_STATUS_BUTTON_NOT_PRESSED       = ( HIDP_ERROR_CODES(0xC, 0xF) )
+    HIDP_STATUS_REPORT_DOES_NOT_EXIST    = ( HIDP_ERROR_CODES(0xC, 0x10) )
+    HIDP_STATUS_NOT_IMPLEMENTED          = ( HIDP_ERROR_CODES(0xC, 0x20) )
 
-    errorMessageDict = {
-        HIDP_STATUS_SUCCESS                  : "Success",
-        HIDP_STATUS_NULL                     : "Null",
-        HIDP_STATUS_INVALID_PREPARSED_DATA   : "Invalid preparsed data",
-        HIDP_STATUS_INVALID_REPORT_TYPE      : "Invalid report type",
-        HIDP_STATUS_INVALID_REPORT_LENGTH    : "Invalid report length",
-        HIDP_STATUS_USAGE_NOT_FOUND          : "Usage not found",
-        HIDP_STATUS_VALUE_OUT_OF_RANGE       : "Value out of range",
-        HIDP_STATUS_BAD_LOG_PHY_VALUES       : "Bad log phy values",
-        HIDP_STATUS_BUFFER_TOO_SMALL         : "Buffer too small",
-        HIDP_STATUS_INTERNAL_ERROR           : "Internal error",
-        HIDP_STATUS_I8042_TRANS_UNKNOWN      : "I8042/I8242 trans unknown",
-        HIDP_STATUS_INCOMPATIBLE_REPORT_ID   : "Incompatible report ID",
-        HIDP_STATUS_NOT_VALUE_ARRAY          : "Not value array",
-        HIDP_STATUS_IS_VALUE_ARRAY           : "Is value array",
-        HIDP_STATUS_DATA_INDEX_NOT_FOUND     : "Data index not found",
-        HIDP_STATUS_DATA_INDEX_OUT_OF_RANGE  : "Data index out of range",
-        HIDP_STATUS_BUTTON_NOT_PRESSED       : "Button not pressed",
-        HIDP_STATUS_REPORT_DOES_NOT_EXIST    : "Report does not exist",
-        HIDP_STATUS_NOT_IMPLEMENTED          : "Not implemented"
+    error_message_dict = {
+        HIDP_STATUS_SUCCESS                  : "success",
+        HIDP_STATUS_NULL                     : "null",
+        HIDP_STATUS_INVALID_PREPARSED_DATA   : "invalid preparsed data",
+        HIDP_STATUS_INVALID_REPORT_TYPE      : "invalid report type",
+        HIDP_STATUS_INVALID_REPORT_LENGTH    : "invalid report length",
+        HIDP_STATUS_USAGE_NOT_FOUND          : "usage not found",
+        HIDP_STATUS_VALUE_OUT_OF_RANGE       : "value out of range",
+        HIDP_STATUS_BAD_LOG_PHY_VALUES       : "bad log phy values",
+        HIDP_STATUS_BUFFER_TOO_SMALL         : "buffer too small",
+        HIDP_STATUS_INTERNAL_ERROR           : "internal error",
+        HIDP_STATUS_I8042_TRANS_UNKNOWN      : "i8042/I8242 trans unknown",
+        HIDP_STATUS_INCOMPATIBLE_REPORT_ID   : "incompatible report ID",
+        HIDP_STATUS_NOT_VALUE_ARRAY          : "not value array",
+        HIDP_STATUS_IS_VALUE_ARRAY           : "is value array",
+        HIDP_STATUS_DATA_INDEX_NOT_FOUND     : "data index not found",
+        HIDP_STATUS_DATA_INDEX_OUT_OF_RANGE  : "data index out of range",
+        HIDP_STATUS_BUTTON_NOT_PRESSED       : "button not pressed",
+        HIDP_STATUS_REPORT_DOES_NOT_EXIST    : "report does not exist",
+        HIDP_STATUS_NOT_IMPLEMENTED          : "not implemented"
     }
         
-    def __init__(self, errorCode):
-        errorCode &= 0xFFFFFFFF
-        self.errorCode = errorCode
-        if errorCode != self.HIDP_STATUS_SUCCESS:
-            if errorCode in self.errorMessageDict:
-                raise HIDError("HidP error: %s" % self.errorMessageDict[errorCode])
+    def __init__(self, error_code):
+        error_code &= 0xFFFFFFFF
+        self.error_code = error_code
+        if error_code != self.HIDP_STATUS_SUCCESS:
+            if error_code in self.error_message_dict:
+                raise HIDError("hidP error: %s" % self.error_message_dict[error_code])
             else:
-                raise HIDError("Unknown HidP error (%s)"%hex(errorCode))
+                raise HIDError("Unknown HidP error (%s)"%hex(error_code))
 
 #*****************
 # kernel32
@@ -300,10 +299,10 @@ WAIT_TIMEOUT   = 0x00000102 # object signal timed out
 WAIT_FAILED    = 0xFFFFFFFF #failed
 INFINITE       = 0xFFFFFFFF
 
-GENERIC_READ    = (-2147483648)
-GENERIC_WRITE   = (1073741824)
-FILE_SHARE_READ = 1
-FILE_SHARE_WRITE= 2
+GENERIC_READ     = (-2147483648)
+GENERIC_WRITE    = (1073741824)
+FILE_SHARE_READ  = 1
+FILE_SHARE_WRITE = 2
 #
 OPEN_EXISTING   = 3
 OPEN_ALWAYS     = 4
@@ -315,8 +314,8 @@ NO_ERROR = 0
 ERROR_IO_PENDING = 997
 
 def GetHidGuid():
-    "Get system-defined GUID for HIDClass devices"
+    "get system-defined GUID for HIDClass devices"
     g = GUID()
-    hidDll.HidD_GetHidGuid(byref(g))
+    hid_dll.HidD_GetHidGuid(byref(g))
     return g
 

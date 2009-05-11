@@ -1,16 +1,25 @@
 #helpers
-from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE
+import ctypes
+from ctypes.wintypes import DWORD, WORD, BYTE
 from WndProcHookMixin import WndProcHookMixin
+from core import HIDError, GetHidGuid
+
+#structures for ctypes
+class GUID(ctypes.Structure):
+    _fields_ = [("Data1", DWORD),
+                ("Data2", WORD),
+                ("Data3", WORD),
+                ("Data4", BYTE * 8)]
 
 #for PNP notifications
-class DEV_BROADCAST_DEVICEINTERFACE(Structure):
+class DEV_BROADCAST_DEVICEINTERFACE(ctypes.Structure):
     _fields_ = [
         # size of the members plus the actual length of the dbcc_name string
         ("dbcc_size", DWORD), 
         ("dbcc_devicetype", DWORD),
         ("dbcc_reserved", DWORD),
         ("dbcc_classguid", GUID),
-        ("dbcc_name", c_wchar), #TCHAR
+        ("dbcc_name", ctypes.c_wchar), #TCHAR
     ]
 
 #***********************************
@@ -42,50 +51,50 @@ DEVICE_NOTIFY_WINDOW_HANDLE     = 0x00000000
 DEVICE_NOTIFY_SERVICE_HANDLE    = 0x00000001
 
 class UsbPnpWindowMixin(WndProcHookMixin):
-    def __init__(self, hidDeviceFilter):
+    def __init__(self, hid_device_filter):
         WndProcHookMixin.__init__(self)
-        self._hNotify = self.RegisterHidNotification()
-        if self._hNotify:
-            self.addMsgHandler(WM_DEVICECHANGE, self._OnHookedPnP)
-            self.hookWndProc()
+        self._h_notify = self.RegisterHidNotification()
+        if self._h_notify:
+            self.add_msg_handler(WM_DEVICECHANGE, self._OnHookedPnP)
+            self.hook_wnd_proc()
         else:
             raise HIDError("PnP notification setup failed!")
-        self.hidFilter = hidDeviceFilter
-        self.currentStatus = "unknown"
+        self.hid_filter = hid_device_filter
+        self.current_status = "unknown"
             
-    def unhookWndProc(self):
-        WndProcHookMixin.unhookWndProc(self)
-        if self._hNotify:
+    def unhook_wnd_proc(self):
+        WndProcHookMixin.unhook_wnd_proc(self)
+        if self._h_notify:
             self.UnRegisterHidNotification() #ignore result
             
-    def _OnHookedPnP(self, wParam, lParam):
+    def _OnHookedPnP(self, w_param, l_param):
         "Process WM_DEVICECHANGE system messages"
-        newStatus = "unknown"
-        if wParam == DBT_DEVICEARRIVAL:
+        new_status = "unknown"
+        if w_param == DBT_DEVICEARRIVAL:
             # hid device attached
-            notifyObj = None
-            if int(lParam) != 0:
-                notifyObj = DEV_BROADCAST_DEVICEINTERFACE.from_address(lParam)
+            notify_obj = None
+            if int(l_param) != 0:
+                notify_obj = DEV_BROADCAST_DEVICEINTERFACE.from_address(l_param)
                 #confirm if the right message received
-                if notifyObj and notifyObj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
+                if notify_obj and notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                     #only connect if already disconnected
-                    if self.hidFilter.getDevices():
-                        newStatus = "connected"
-        elif wParam == DBT_DEVICEREMOVECOMPLETE:
+                    if self.hid_filter.get_devices():
+                        new_status = "connected"
+        elif w_param == DBT_DEVICEREMOVECOMPLETE:
             # hid device removed
-            notifyObj = None
-            if int(lParam) != 0:
-                notifyObj = DEV_BROADCAST_DEVICEINTERFACE.from_address(lParam)
+            notify_obj = None
+            if int(l_param) != 0:
+                notify_obj = DEV_BROADCAST_DEVICEINTERFACE.from_address(l_param)
                 #
-                if notifyObj and notifyObj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
+                if notify_obj and notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                     #only connect if already disconnected
-                    if not self.hidFilter.getDevices():
-                        newStatus = "disconnected"
+                    if not self.hid_filter.get_devices():
+                        new_status = "disconnected"
                     
         #verify if need to call event handler
-        if newStatus != "unknown" and newStatus != self.currentStatus:
-            self.currentStatus = newStatus
-            self.OnUsbPnPEvent(self.currentStatus)
+        if new_status != "unknown" and new_status != self.current_status:
+            self.current_status = new_status
+            self.OnUsbPnPEvent(self.current_status)
         #
         return True
         
@@ -94,23 +103,23 @@ class UsbPnpWindowMixin(WndProcHookMixin):
         returns a notification handler"""
         
         #create structure
-        notifyObj = DEV_BROADCAST_DEVICEINTERFACE()
+        notify_obj = DEV_BROADCAST_DEVICEINTERFACE()
         #fill up
-        #ctypes.memset(byref(notifyObj), 0, sizeof(notifyObj))
-        notifyObj.dbcc_size = sizeof(notifyObj)
-        notifyObj.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE
-        notifyObj.dbcc_classguid = GetHidGuid()
-        hNotify = RegisterDeviceNotification(self.GetHandle(), byref(notifyObj), DEVICE_NOTIFY_WINDOW_HANDLE)
+        #ctypes.memset(ctypes.byref(notify_obj), 0, ctypes.sizeof(notify_obj))
+        notify_obj.dbcc_size = ctypes.sizeof(notify_obj)
+        notify_obj.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE
+        notify_obj.dbcc_classguid = GetHidGuid()
+        h_notify = RegisterDeviceNotification(self.GetHandle(), ctypes.byref(notify_obj), DEVICE_NOTIFY_WINDOW_HANDLE)
         #
-        return int(hNotify)
+        return int(h_notify)
 
     def UnRegisterHidNotification(self):
         "Remove PnP notification handler"
-        if int(self._hNotify) == 0:
+        if int(self._h_notify) == 0:
             return #invalid
 
-        result = UnregisterDeviceNotification(self._hNotify)
-        self._hNotify = None
+        result = UnregisterDeviceNotification(self._h_notify)
+        self._h_notify = None
         return int(result)
         
     def OnUsbPnPEvent(self):

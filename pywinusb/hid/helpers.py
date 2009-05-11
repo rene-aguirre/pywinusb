@@ -1,4 +1,9 @@
-from winapi import c_char
+from ctypes import c_char
+from UserList import UserList
+
+class HIDError(Exception):
+    "Main HID error exception class type"
+    pass
 
 def simple_decorator(decorator):
     """This decorator can be used to turn simple functions
@@ -39,22 +44,29 @@ def synchronized(lock):
     """ Synchronization decorator. """
     @simple_decorator
     def wrap(f):
-        def newFunction(*args, **kw):
+        def new_function(*args, **kw):
             lock.acquire()
             try:
                 return f(*args, **kw)
             finally:
                 lock.release()
-        return newFunction
+        return new_function
     return wrap
 
-def InspectStruct(structObj):
+def InspectStruct(struct_obj):
     result = []
-    result.append(repr(structObj))
-    for field, t in structObj._fields_:
-        value = getattr(structObj, field)
+    result.append(repr(struct_obj))
+    for field, t in struct_obj._fields_:
+        value = getattr(struct_obj, field)
         if issubclass(t, c_char):
             result.append("\t%s: 0x%x"%(field, ord(value)) )
         else:
             result.append("\t%s: %s"%(field, str(value)) )
     return '\n'.join(result)
+
+class ReadOnlyList(UserList):
+    "Read only sequence wrapper"
+    def __init__(self, any_list):
+        UserList.__init__(self, any_list)
+    def __setitem__(self, index, value):
+        raise ValueError("Object is read-only")

@@ -1,22 +1,24 @@
 #
+"""
+This is the main module, the main interface classes and functions
+are available in the top level hid package
+"""
 import sys
 import ctypes
 import _winreg
 import threading
 import time
 
-from UserList import UserList
-from ctypes import Structure, Union, c_byte, c_char, c_int, c_long, c_ulong, c_ushort, c_wchar
-from ctypes import pointer, byref, sizeof, POINTER
-from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE
+from ctypes import c_byte, c_ulong, c_ushort, c_wchar, byref, sizeof
+
 #local modules
 from winapi import *
-from helpers import synchronized
+from helpers import HIDError, synchronized, ReadOnlyList
 
 USAGE = c_ushort
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
-usageEvents = [
+USAGE_EVENTS = [
     HID_EVT_NONE,
     HID_EVT_ALL,
     HID_EVT_CHANGED,
@@ -26,178 +28,207 @@ usageEvents = [
     HID_EVT_CLEAR,
 ] = range(7)
 
-def getFullUsageId(pageId, usageId):
-    return (pageId << 16) | usageId
+def get_full_usage_id(page_id, usage_id):
+    return (page_id << 16) | usage_id
 
-def getUsagePageId(fullUsageId):
-    return (fullUsageId >> 16) & 0xffff
+def get_usage_page_id(full_usage_id):
+    return (full_usage_id >> 16) & 0xffff
 
-def getShortUsageId(fullUsageId):
-    return fullUsageId & 0xffff
+def get_short_usage_id(full_usage_id):
+    return full_usage_id & 0xffff
 
-def hidDevicePathExists(devicePath, hidGuid = GetHidGuid()):
-    "Test if required devicePath is still valid (HID device connected to host)"
+def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
+    """Test if required device_path is still valid (HID device connected 
+    to host)"""
     # get HID device class guid
 
     # handle to an opaque device information set
-    hInfo = SetupDiGetClassDevs(byref(hidGuid), None, None, (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE))
+    h_info = SetupDiGetClassDevs(byref(hid_guid), None, None, (DIGCF_PRESENT \
+        | DIGCF_DEVICEINTERFACE))
 
-    if hInfo == INVALID_HANDLE_VALUE:
+    if h_info == INVALID_HANDLE_VALUE:
         return False
     try:
         # retrieve all the available interface information.
-        deviceInterface = SP_DEVICE_INTERFACE_DATA()
-        deviceInterface.cbSize = sizeof(deviceInterface)
+        device_interface = SP_DEVICE_INTERFACE_DATA()
+        device_interface.cb_size = sizeof(device_interface)
 
-        deviceInterfaceDetail = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        deviceInterfaceDetail.cbSize = sizeof(deviceInterfaceDetail) - (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
+        dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
+        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) - \
+            (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
 
-        devIndex = 0
-        requiredSize = c_ulong()
-        while setupapiDLL.SetupDiEnumDeviceInterfaces(hInfo, None, byref(hidGuid), devIndex, byref(deviceInterface)):
-            devIndex += 1
+        dev_index = 0
+        required_size = c_ulong()
+        while setup_api.SetupDiEnumDeviceInterfaces(h_info, None, 
+                byref(hid_guid), dev_index, byref(device_interface)):
+            dev_index += 1
 
             # validate if hid path would fit
-            requiredSize.value = 0
-            SetupDiGetDeviceInterfaceDetail(hInfo, byref(deviceInterface), None, 0, byref(requiredSize), None)
-            if requiredSize.value > sizeof(deviceInterfaceDetail):
+            required_size.value = 0
+            SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
+                None, 0, byref(required_size), None)
+            if required_size.value > sizeof(dev_inter_detail_data):
                 sys.stderr.write("Error getting HID device info.\n")
                 continue
 
             # it's ok to get the details
-            SetupDiGetDeviceInterfaceDetail(hInfo, byref(deviceInterface), byref(deviceInterfaceDetail), requiredSize, None, None)
+            SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
+                    byref(dev_inter_detail_data), required_size, None, None)
 
-            if deviceInterfaceDetail.DevicePath == devicePath:
+            if dev_inter_detail_data.device_path == device_path:
                 return True
     finally:
         # clean up
-        setupapiDLL.SetupDiDestroyDeviceInfoList(hInfo)
+        setup_api.SetupDiDestroyDeviceInfoList(h_info)
     #
     return False
 
-def findAllHidDevices():
+def find_all_hid_devices():
     "Finds all HID devices connected to the system"
-    """From ddk documentation (finding and Opening HID collection):
-    After a user-mode application is loaded, it does the following sequence of operations:
-        * Calls HidD_GetHidGuid to obtain the system-defined GUID for HIDClass devices.
-        * Calls SetupDiGetClassDevs to obtain a handle to an opaque device information set
-          that describes the device interfaces supported by all the HID collections currently
-          installed in the system. The application should specify DIGCF_PRESENT and
-          DIGCF_INTERFACEDEVICE in the Flags parameter passed to SetupDiGetClassDevs.
-        * Calls SetupDiEnumDeviceInterfaces repeatedly to retrieve all the available
-          interface information.
-        * Calls SetupDiGetDeviceInterfaceDetail to format interface information for each
-          collection as a SP_INTERFACE_DEVICE_DETAIL_DATA structure. The DevicePath member
-          of this structure contains the user-mode name that the application uses with the
-          Win32 function CreateFile to obtain a file handle to a HID collection.
-    """
+    #
+    # From ddk documentation (finding and Opening HID collection):
+    # After a user-mode application is loaded, it does the following sequence of 
+    # operations:
+    #
+    #   * Calls HidD_GetHidGuid to obtain the system-defined GUID for HIDClass 
+    #     devices.
+    #     
+    #   * Calls SetupDiGetClassDevs to obtain a handle to an opaque device 
+    #     information set that describes the device interfaces supported by all
+    #     the HID collections currently installed in the system. The 
+    #     application should specify DIGCF_PRESENT and DIGCF_INTERFACEDEVICE 
+    #     in the Flags parameter passed to SetupDiGetClassDevs.
+    #     
+    #   * Calls SetupDiEnumDeviceInterfaces repeatedly to retrieve all the 
+    #     available interface information.
+    #     
+    #   * Calls SetupDiGetDeviceInterfaceDetail to format interface information
+    #     for each collection as a SP_INTERFACE_DEVICE_DETAIL_DATA structure. 
+    #     The device_path member of this structure contains the user-mode name
+    #     that the application uses with the Win32 function CreateFile to 
+    #     obtain a file handle to a HID collection.
+    #
     # get HID device class guid
-    g = GetHidGuid()
+    hid_guid = GetHidGuid()
 
     # handle to an opaque device information set
-    hInfo = SetupDiGetClassDevs(byref(g), None, None, (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE))
+    h_info = SetupDiGetClassDevs(byref(hid_guid), None, None, 
+            (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE) )
 
-    if hInfo == INVALID_HANDLE_VALUE:
+    if h_info == INVALID_HANDLE_VALUE:
         return []
 
     try:
         # retrieve all the available interface information.
-        deviceInterface = SP_DEVICE_INTERFACE_DATA()
-        deviceInterface.cbSize = sizeof(deviceInterface)
+        dev_interface_data = SP_DEVICE_INTERFACE_DATA()
+        dev_interface_data.cb_size = sizeof(dev_interface_data)
 
-        deviceInterfaceDetail = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        deviceInterfaceDetail.cbSize = sizeof(deviceInterfaceDetail) - (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
+        dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
+        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) - \
+                (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
 
-        deviceInfoData = SP_DEVINFO_DATA()
-        deviceInfoData.cbSize = sizeof(deviceInfoData)
+        dev_info_data = SP_DEVINFO_DATA()
+        dev_info_data.cb_size = sizeof(dev_info_data)
 
         i = 0
-        requiredSize = c_ulong()
-        parentDevice = c_ulong()
+        required_size = c_ulong()
+        parent_device = c_ulong()
         results = []
-        while setupapiDLL.SetupDiEnumDeviceInterfaces(hInfo, None, byref(g), i, byref(deviceInterface)):
+        while setup_api.SetupDiEnumDeviceInterfaces(h_info, None, 
+                byref(hid_guid), i, byref(dev_interface_data) ):
             i += 1
 
             # validate if hid path would fit
-            requiredSize.value = 0
-            SetupDiGetDeviceInterfaceDetail(hInfo, byref(deviceInterface), None, 0, byref(requiredSize), None)
-            if requiredSize.value > sizeof(deviceInterfaceDetail):
+            required_size.value = 0
+            SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
+                    None, 0, byref(required_size), None)
+            if required_size.value > sizeof(dev_inter_detail_data):
                 sys.stderr.write("Error getting HID device info.\n")
                 continue
 
             # it's ok to get the details
-            SetupDiGetDeviceInterfaceDetail(hInfo, byref(deviceInterface), byref(deviceInterfaceDetail), requiredSize, None, byref(deviceInfoData))
+            SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
+                    byref(dev_inter_detail_data), required_size, None, 
+                    byref(dev_info_data))
 
             #get parent instance id (so we can discriminate on port)
-            if setupapiDLL.CM_Get_Parent(byref(parentDevice), deviceInfoData.DevInst, 0) != 0: #CR_SUCCESS = 0
-                parentDevice.value = 0 #null
+            if setup_api.CM_Get_Parent(byref(parent_device), 
+                    dev_info_data.dev_inst, 0) != 0: #CR_SUCCESS = 0
+                parent_device.value = 0 #null
 
             #get unique instance id str
-            requiredSize.value = 0
-            SetupDiGetDeviceInstanceId(hInfo, byref(deviceInfoData), None, 0, byref(requiredSize))
-            if requiredSize.value > 0:
-                deviceInstanceIdType = c_tchar * requiredSize.value
-                deviceInstanceId = deviceInstanceIdType()
-                SetupDiGetDeviceInstanceId(hInfo, byref(deviceInfoData), byref(deviceInstanceId), requiredSize, byref(requiredSize))
-                hidDevice = HidDevice(deviceInterfaceDetail.DevicePath, parentDevice.value, deviceInstanceId.value)
+            required_size.value = 0
+            SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), None, 
+                0, byref(required_size) )
+            if required_size.value > 0:
+                device_instance_id_type = c_tchar * required_size.value
+                deviceinstance_id = device_instance_id_type()
+                SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), 
+                        byref(deviceinstance_id), required_size, 
+                        byref(required_size) )
+                hid_device = HidDevice(dev_inter_detail_data.device_path, 
+                        parent_device.value, deviceinstance_id.value )
             else:
-                hidDevice = HidDevice(deviceInterfaceDetail.DevicePath, parentDevice.value)
+                hid_device = HidDevice(dev_inter_detail_data.device_path, 
+                        parent_device.value )
             # add device to results
-            if hidDevice.VendorId: #this means device it's not protected
-                results.append(hidDevice)
+            if hid_device.vendor_id: #this means device it's not protected
+                results.append(hid_device)
 
     finally:
         # clean up
-        setupapiDLL.SetupDiDestroyDeviceInfoList(hInfo)
+        setup_api.SetupDiDestroyDeviceInfoList(h_info)
     return results
 
 class HidDeviceFilter(object):
-    """This class allows searching for HID devices currently connected to the system, it also allows
-    to search for specific devices (by filtering)"""
+    """This class allows searching for HID devices currently connected to 
+    the system, it also allows to search for specific devices  (by filtering)
+    """
     def __init__(self, *args, **kwrds):
-        self.filterParams = kwrds
+        self.filter_params = kwrds
 
-    def getDevicesByParent(self, hidFilter=None):
-        allDevs = self.getDevices(hidFilter)
-        groupedDevs = dict()
-        for hidDevice in allDevs:
+    def get_devices_by_parent(self, hid_filter=None):
+        all_devs = self.get_devices(hid_filter)
+        dev_group = dict()
+        for hid_device in all_devs:
             #keep a list of known devices matching parent device Ids
-            parentId = hidDevice.getParentInstanceId()
-            deviceSet = groupedDevs.get(parentId, [])
-            deviceSet.append(hidDevice)
-            if parentId not in groupedDevs:
+            parent_id = hid_device.get_parent_instance_id()
+            device_set = dev_group.get(parent_id, [])
+            device_set.append(hid_device)
+            if parent_id not in dev_group:
                 #add new
-                groupedDevs[parentId] = deviceSet
-        return groupedDevs
+                dev_group[parent_id] = device_set
+        return dev_group
 
-    def getDevices(self, hidFilter = None):
-        """Filter a HID device list by current object parameters. Devices must match the
-        all of the filterin parameters
+    def get_devices(self, hid_filter = None):
+        """Filter a HID device list by current object parameters. Devices 
+        must match the all of the filterin parameters
         """
-        if not hidFilter: #empty list or called without any parameters
-            if type(hidFilter) == type(None):
+        if not hid_filter: #empty list or called without any parameters
+            if type(hid_filter) == type(None):
                 #request to query connected devices
-                hidFilter = findAllHidDevices()
+                hid_filter = find_all_hid_devices()
             else:
-                return hidFilter
+                return hid_filter
         #initially all accepted
-        results = {}.fromkeys(hidFilter)
+        results = {}.fromkeys(hid_filter)
 
         #the filter parameters
-        validatingAttributes = self.filterParams.keys()
+        validating_attributes = self.filter_params.keys()
 
         #first filter out restricted access devices
         for item in results.keys():
-            if not item.isActive():
+            if not item.is_active():
                 del results[item]
 
         #filter out
-        for item in validatingAttributes:
-            if item.endswith("Includes"):
-                item = item[:-len("Includes")]
-            elif item.endswith("Mask"):
-                item = item[:-len("Mask")]
-            elif item +"Mask" in self.filterParams or item + "Includes" in self.filterParams:
+        for item in validating_attributes:
+            if item.endswith("_includes"):
+                item = item[:-len("_includes")]
+            elif item.endswith("_mask"):
+                item = item[:-len("_mask")]
+            elif item +"_mask" in self.filter_params or item + "_includes" \
+                    in self.filter_params:
                 continue # value mask or string search is being queried
             elif item not in HidDevice._filter_attributes_:
                 continue # field does not exist sys.error.write(...)
@@ -205,17 +236,20 @@ class HidDeviceFilter(object):
             for device in results.keys():
                 if not hasattr(device, item):
                     del results[device]
-                elif item + "Mask" in validatingAttributes:
+                elif item + "_mask" in validating_attributes:
                     #masked value
-                    if getattr(device, item) & self.filterParams[item + "Mask"] != self.filterParams[item] & self.filterParams[item + "Mask"]:
+                    if getattr(device, item) & self.filter_params[item + \
+                            "_mask"] != self.filter_params[item] \
+                            & self.filter_params[item + "_mask"]:
                         del results[device]
-                elif item + "Includes" in validatingAttributes:
+                elif item + "_includes" in validating_attributes:
                     #subset item
-                    if self.filterParams[item + "Includes"] not in getattr(device, item):
+                    if self.filter_params[item + "_includes"] not in \
+                            getattr(device, item):
                         del results[device]
                 else:
                     #plain comparition
-                    if getattr(device, item) != self.filterParams[item]:
+                    if getattr(device, item) != self.filter_params[item]:
                         del results[device]
             #
         return results.keys()
@@ -223,764 +257,373 @@ class HidDeviceFilter(object):
 MAX_DEVICE_ID_LEN = 200 + 1 #+EOL (just in case)
 class HidDeviceBaseClass(object):
     "Utility parent class for main HID device class"
-    _rawReportsLock = threading.Lock()
+    _raw_reports_lock = threading.Lock()
+    
+    def __init__(self):
+        "initializer"
+        pass
 
 class HidDevice(HidDeviceBaseClass):
     MAX_MANUFACTURER_STRING_LEN = 128 #it's actually 126 + 1 (null)
     MAX_PRODUCT_STRING_LEN = 128 #it's actually 126 + 1 (null)
-    _filter_attributes_ = ["VendorId", "ProductId", "VersionNumber", "ProductStr", "ManufacturerStr"]
+    
+    _filter_attributes_ = ["vendor_id", "product_id", "version_number", 
+        "product_name", "vendor_name"]
 
-    def getParentInstanceId(self):
-        return self.parentInstanceId
+    def get_parent_instance_id(self):
+        return self.parent_instance_id
 
-    def getParentDevice(self):
-        if not self.parentInstanceId:
+    def get_parent_device(self):
+        if not self.parent_instance_id:
             return ""
-        devBufferType = c_tchar * MAX_DEVICE_ID_LEN
-        devBuffer = devBufferType()
-        if CM_Get_Device_ID(self.parentInstanceId, byref(devBuffer), MAX_DEVICE_ID_LEN, 0) == 0: #success
-            return devBuffer.value
+        dev_buffer_type = c_tchar * MAX_DEVICE_ID_LEN
+        dev_buffer = dev_buffer_type()
+        if CM_Get_Device_ID(self.parent_instance_id, byref(dev_buffer), 
+                MAX_DEVICE_ID_LEN, 0) == 0: #success
+            return dev_buffer.value
         return ""
 
-    def __init__(self, devicePath, parentInstanceId = 0, instanceId=""):
-        "Interface for HID device as referenced by devicePath parameter"
+    def __init__(self, device_path, parent_instance_id = 0, instance_id=""):
+        "Interface for HID device as referenced by device_path parameter"
         #allow safe access (and object browsing)
-        self.__resetVars() #init hw related vars
-        self.devicePath = devicePath
-        self.instanceId = instanceId
-        self.parentInstanceId = parentInstanceId
-        self.ProductStr = ""
-        self.ManufacturerStr = ""
-        self.VendorId  = 0
-        self.ProductId = 0
-        self.VersionNumber = 0
-
+        self.__reset_vars() #init hw related vars
+        self.device_path = device_path
+        self.instance_id = instance_id
+        self.parent_instance_id = parent_instance_id
+        self.product_name = ""
+        self.vendor_name = ""
+        self.vendor_id  = 0
+        self.product_id = 0
+        self.version_number = 0
+        HidDeviceBaseClass.__init__(self)
+        
         # HID device handle first
-        hHid = CreateFile(devicePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0)
-        if hHid == INVALID_HANDLE_VALUE:
+        h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
+                FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0)
+        if h_hid == INVALID_HANDLE_VALUE:
             return
 
         try:
             # get device attributes
-            hiddAttributes = HIDD_ATTRIBUTES()
-            hiddAttributes.cbSize = sizeof(hiddAttributes)
-            if not hidDll.HidD_GetAttributes(int(hHid), byref(hiddAttributes)):
+            hidd_attributes = HIDD_ATTRIBUTES()
+            hidd_attributes.cb_size = sizeof(hidd_attributes)
+            if not hid_dll.HidD_GetAttributes(int(h_hid), 
+                    byref(hidd_attributes) ):
                 return #can't read attributes
 
             #set local references
-            self.VendorId  = hiddAttributes.VendorId
-            self.ProductId = hiddAttributes.ProductId
-            self.VersionNumber = hiddAttributes.VersionNumber
+            self.vendor_id  = hidd_attributes.vendor_id
+            self.product_id = hidd_attributes.product_id
+            self.version_number = hidd_attributes.version_number
 
             # manufacturer string
-            vendorStringType = c_wchar * self.MAX_MANUFACTURER_STRING_LEN
-            vendorStr = vendorStringType()
-            if not hidDll.HidD_GetManufacturerString(int(hHid), byref(vendorStr), sizeof(vendorStr)) or not len(vendorStr.value):
-                # would be any possibility to get a vendor id table?, maybe not worth it
-                self.ManufacturerStr = "Unknown manufacturer"
+            vendor_string_type = c_wchar * self.MAX_MANUFACTURER_STRING_LEN
+            vendor_name = vendor_string_type()
+            if not hid_dll.HidD_GetManufacturerString(int(h_hid), 
+                    byref(vendor_name), 
+                    sizeof(vendor_name)) or not len(vendor_name.value):
+                # would be any possibility to get a vendor id table?, 
+                # maybe not worth it
+                self.vendor_name = "Unknown manufacturer"
             else:
-                self.ManufacturerStr = vendorStr.value
+                self.vendor_name = vendor_name.value
 
             # string buffer for product string
-            productStringType = c_wchar * self.MAX_PRODUCT_STRING_LEN
-            productStr = productStringType()
-            if not hidDll.HidD_GetProductString(int(hHid), byref(productStr), sizeof(productStr)) or not len(productStr.value):
-                # alternate methode, refer to windows registry for product information
-                pathParts = devicePath[len("\\\\.\\"):].split("#") # starts with r"\\.\" but my syntax highlighting has issues
-                hReg = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Enum\\" + \
-                    pathParts[0] + "\\" + \
-                    pathParts[1] + "\\" + \
-                    pathParts[2]
-                )
-                self.ProductStr, r = _winreg.QueryValueEx(hReg, "DeviceDesc")
-                _winreg.CloseKey(hReg)
+            product_name_type = c_wchar * self.MAX_PRODUCT_STRING_LEN
+            product_name = product_name_type()
+            if not hid_dll.HidD_GetProductString(int(h_hid), 
+                        byref(product_name), 
+                        sizeof(product_name)) or not len(product_name.value):
+                # alternate methode, refer to windows registry for product 
+                # information
+                path_parts = device_path[len("\\\\.\\"):].split("#")
+                h_register = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, 
+                    "SYSTEM\\CurrentControlSet\\Enum\\" + \
+                    path_parts[0] + "\\" + \
+                    path_parts[1] + "\\" + \
+                    path_parts[2] )
+                self.product_name, other = _winreg.QueryValueEx(h_register, 
+                        "DeviceDesc")
+                _winreg.CloseKey(h_register)
             else:
-                self.ProductStr = productStr.value
+                self.product_name = product_name.value
 
         finally:
             # clean up
-            CloseHandle(hHid)
+            CloseHandle(h_hid)
 
-    def isActive(self):
-        if not self.VendorId:
+    def is_active(self):
+        if not self.vendor_id:
             return False
         return True
 
-    def Open(self, inputReportHandler = None):
+    def open(self):
         """Open HID device and obtain 'Collection Information'.
-        It effectevely prepares the HidDevice object for reading and writing"""
-        if not self.VendorId or self.isOpened():
+        It effectevely prepares the HidDevice object for reading and writing
+        """
+        if not self.vendor_id or self.is_opened():
             return
 
-        if self.isOpened():
+        if self.is_opened():
             raise HIDError("Device already opened")
 
-        hidHandle = CreateFile(
-            self.devicePath,
+        hid_handle = CreateFile(
+            self.device_path,
             GENERIC_READ | GENERIC_WRITE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             None, # no security
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
             0 )
-        if hidHandle == INVALID_HANDLE_VALUE:
-            raise HIDError("Error opening HID device: %s\n"%self.deviceName)
+        if hid_handle == INVALID_HANDLE_VALUE:
+            raise HIDError("Error opening HID device: %s\n"%self.product_name)
 
-        self.__openStatus = True
-        self.hidHandle = hidHandle
+        self.__open_status = True
+        self.hid_handle = hid_handle
+        
         #get preparsed data
-        pPreparsedData = c_ulong()
-        if not hidDll.HidD_GetPreparsedData(int(hidHandle), byref(pPreparsedData)):
-            self.Close()
+        ptr_preparsed_data = c_ulong()
+        if not hid_dll.HidD_GetPreparsedData(int(hid_handle), 
+                byref(ptr_preparsed_data)):
+            self.close()
             raise HIDError("Failure to get HID preparsed data")
-        self.pPreparsedData = pPreparsedData
+        self.ptr_preparsed_data = ptr_preparsed_data
 
         #get top level capabilities
-        hidCaps = HIDP_CAPS()
-        HIDP_STATUS( hidDll.HidP_GetCaps(pPreparsedData, byref(hidCaps)) )
-        self.hidCaps = hidCaps
-
-        #self.UsagePage = UsagePage(hidCaps.UsagePage) #friendly usage page name
-        #self.Usage = Usage(hidCaps.UsagePage, hidCaps.Usage) #friendly usage name
-
+        hid_caps = HIDP_CAPS()
+        HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps)) )
+        self.hid_caps = hid_caps
+        
         #proceed with button capabilities
-        capsLength = c_ulong()
+        caps_length = c_ulong()
 
-        allItems = [\
-            (HidP_Input,   HIDP_BUTTON_CAPS, int(hidCaps.NumberInputButtonCaps),    hidDll.HidP_GetButtonCaps),
-            (HidP_Input,   HIDP_VALUE_CAPS,  int(hidCaps.NumberInputValueCaps),     hidDll.HidP_GetValueCaps),
-            (HidP_Output,  HIDP_BUTTON_CAPS, int(hidCaps.NumberOutputButtonCaps),   hidDll.HidP_GetButtonCaps),
-            (HidP_Output,  HIDP_VALUE_CAPS,  int(hidCaps.NumberOutputValueCaps),    hidDll.HidP_GetValueCaps),
-            (HidP_Feature, HIDP_BUTTON_CAPS, int(hidCaps.NumberFeatureButtonCaps),  hidDll.HidP_GetButtonCaps),
-            (HidP_Feature, HIDP_VALUE_CAPS,  int(hidCaps.NumberFeatureValueCaps),   hidDll.HidP_GetValueCaps),
+        all_items = [\
+            (HidP_Input,   HIDP_BUTTON_CAPS, 
+                int(hid_caps.number_input_button_caps),    
+                hid_dll.HidP_GetButtonCaps
+            ),
+            (HidP_Input,   HIDP_VALUE_CAPS,  
+                int(hid_caps.number_input_value_caps),     
+                hid_dll.HidP_GetValueCaps
+            ),
+            (HidP_Output,  HIDP_BUTTON_CAPS, 
+                int(hid_caps.number_output_button_caps),   
+                hid_dll.HidP_GetButtonCaps
+            ),
+            (HidP_Output,  HIDP_VALUE_CAPS,  
+                int(hid_caps.number_output_value_caps),    
+                hid_dll.HidP_GetValueCaps
+            ),
+            (HidP_Feature, HIDP_BUTTON_CAPS, 
+                int(hid_caps.number_feature_button_caps),  
+                hid_dll.HidP_GetButtonCaps
+            ),
+            (HidP_Feature, HIDP_VALUE_CAPS, 
+                int(hid_caps.number_feature_value_caps),
+                hid_dll.HidP_GetValueCaps
+            ),
         ]
 
-        for reportKind, structType, maxItems, getControlCaps in allItems:
-            if not int(maxItems): continue #nothing here
+        for report_kind, struct_kind, max_items, get_control_caps in all_items:
+            if not int(max_items): continue #nothing here
             #create storage for control/data
-            ctrlArrayType = structType * maxItems
-            ctrlArray = ctrlArrayType()
+            ctrl_array_type = struct_kind * max_items
+            ctrl_array = ctrl_array_type()
 
             #target max size for api function
-            capsLength.value = maxItems
-            HIDP_STATUS( getControlCaps(\
-                reportKind,
-                byref(ctrlArray),
-                byref(capsLength),
-                pPreparsedData) )
+            caps_length.value = max_items
+            HidStatus( get_control_caps(\
+                report_kind,
+                byref(ctrl_array),
+                byref(caps_length),
+                ptr_preparsed_data) )
             #keep reference of usages
-            for idx in range(capsLength.value):
-                usageItem = ctrlArray[idx]
+            for idx in range(caps_length.value):
+                usage_item = ctrl_array[idx]
                 #by report type
-                if not self.usagesStorage.has_key(reportKind):
-                    self.usagesStorage[reportKind] = list()
-                self.usagesStorage[reportKind].append( usageItem )
-                #also add reportId to known reports set
-                if not self.reportSet.has_key(reportKind):
-                    self.reportSet[reportKind] = set()
-                self.reportSet[reportKind].add( usageItem.ReportID )
+                if not self.usages_storage.has_key(report_kind):
+                    self.usages_storage[report_kind] = list()
+                self.usages_storage[report_kind].append( usage_item )
+                #also add report_id to known reports set
+                if not self.report_set.has_key(report_kind):
+                    self.report_set[report_kind] = set()
+                self.report_set[report_kind].add( usage_item.report_id )
         #now prepare the input report handler
-        if hidCaps.InputReportByteLength:
+        if hid_caps.input_report_byte_length:
             #first make templates for easy parsing input reports
-            self.__inputReportTemplates = dict()
-            for reportId in self.reportSet[HidP_Input]:
-                self.__inputReportTemplates[reportId] = HidDevice.HidReport(self, HidP_Input, reportId)
+            self.__input_report_templates = dict()
+            for report_id in self.report_set[HidP_Input]:
+                self.__input_report_templates[report_id] = \
+                        HidReport( self, HidP_Input, report_id )
             #prepare input reports handlers
-            self._inputReportQueue = HidDevice.InputReportQueue(self.maxInputQueueSize, hidCaps.InputReportByteLength)
-            self.__inputProcessingThread = HidDevice.InputReportProcessingThread(self)
-            self.__readingThread = HidDevice.InputReportReaderThread(self, hidCaps.InputReportByteLength)
+            self._input_report_queue = HidDevice.InputReportQueue( \
+                self.max_input_queue_size, hid_caps.input_report_byte_length)
+            self.__input_processing_thread = \
+                    HidDevice.InputReportProcessingThread(self)
+            self.__reading_thread = HidDevice.InputReportReaderThread( \
+                self, hid_caps.input_report_byte_length)
         #
 
-    def SendOutputReport(self, data):
-        """Send input/output/feature report ID = reportId, data should be a c_byte object
-        with included the required report data"""
-        assert( self.isOpened() )
+    def send_output_report(self, data):
+        """Send input/output/feature report ID = report_id, data should be a 
+        c_byte object with included the required report data
+        """
+        assert( self.is_opened() )
 
         #make sure we have c_byte array storage
-        if not ( isinstance(data, ctypes.Array) and issubclass(data._type_, c_byte) ):
-            rawDataType = c_byte * len(data)
-            rawData = rawDataType()
-            for index, value in enumerate(data):
-                rawData[index] = data[index]
+        if not ( isinstance(data, ctypes.Array) and \
+                issubclass(data._type_, c_byte) ):
+            raw_data_type = c_byte * len(data)
+            raw_data = raw_data_type()
+            for index in range( len(data) ):
+                raw_data[index] = data[index]
         else:
-            rawData = data
+            raw_data = data
         #
-        #TODO: Add a lock when writing (overlaped writes)
-        overWrite = OVERLAPPED()
-        overWrite.hEvent = CreateEvent(None, 0, 0, None)
-        if overWrite.hEvent:
-            _overlappedWrite = overWrite
-            WriteFile(int(self.hidHandle), byref(rawData), len(rawData),
-                None, byref(_overlappedWrite)) #none overlaped
+        # Adding a lock when writing (overlaped writes)
+        over_write = OVERLAPPED()
+        over_write.h_event = CreateEvent(None, 0, 0, None)
+        if over_write.h_event:
+            overlapped_write = over_write
+            WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
+                None, byref(overlapped_write)) #none overlaped
             #print "ww"
-            result = WaitForSingleObject(_overlappedWrite.hEvent, 10000 )
+            result = WaitForSingleObject(overlapped_write.h_event, 10000 )
             #print "wf"
-            CloseHandle(_overlappedWrite.hEvent)
+            CloseHandle(overlapped_write.h_event)
             if result != WAIT_OBJECT_0: #success
                 return False #device has being disconnected
         else:
-            return WriteFile(int(self.hidHandle), byref(rawData), len(rawData),
+            return WriteFile(int(self.hid_handle), byref(raw_data), 
+                len(raw_data),
                 None, None) #none overlaped
         return True #completed
 
-    def SendFeatureReport(self, data):
-        """Send input/output/feature report ID = reportId, data should be a c_byte object
-        with included the required report data"""
+    def send_feature_report(self, data):
+        """Send input/output/feature report ID = report_id, data should be a 
+        c_byte object with included the required report data
+        """
         #make sure we have c_byte array storage
-        if not ( isinstance(data, ctypes.Array) and issubclass(data._type_, c_byte) ):
-            rawDataType = c_byte * len(data)
-            rawData = rawDataType()
-            for index, value in enumerate(data):
-                rawData[index] = data[index]
+        if not ( isinstance(data, ctypes.Array) and issubclass(data._type_, 
+                c_byte) ):
+            raw_data_type = c_byte * len(data)
+            raw_data = raw_data_type()
+            for index in range( len(data) ):
+                raw_data[index] = data[index]
         else:
-            rawData = data
-        #
-        bytesWritten = c_ulong()
-        #TODO: Add a lock when writing (overlaped writes)
-        return hidDll.HidD_SetFeature(int(self.hidHandle), byref(rawData), len(rawData))
+            raw_data = data
+            
+        return hid_dll.HidD_SetFeature(int(self.hid_handle), byref(raw_data),
+                len(raw_data))
 
-    def __resetVars(self):
+    def __reset_vars(self):
         #reset vars (for init or gc)
-        self.__openStatus = False
-        self.usagesStorage = dict()
-        self.reportSet = dict()
-        self.hidCaps = None
-        self.pPreparsedData = None
-        self.hidHandle = None
+        self.__open_status = False
+        self.usages_storage = dict()
+        self.report_set = dict()
+        self.hid_caps = None
+        self.ptr_preparsed_data = None
+        self.hid_handle = None
         #don't clean up the report quque because the
         #consumer & producer threads might neede it
-        #self._inputReportQueue = None
-        self.__evtHandlers = dict()
+        #self._input_report_queue = None
+        self.__evt_handlers = dict()
+        
+        #other
+        self.__reading_thread = None
+        self.__input_processing_thread = None
+        self._input_report_queue = None
+        
+    def is_plugged(self):
+        return self.device_path and hid_device_path_exists(self.device_path)
 
-    def isPlugged(self):
-        return self.devicePath and hidDevicePathExists(self.devicePath)
+    def is_opened(self):
+        return self.__open_status
 
-    def isOpened(self):
-        return self.__openStatus
-
-    def Close(self):
+    def close(self):
         # free parsed data
-        if not self.isOpened():
-            #print "Already closed: %d"%self.hidHandle
+        if not self.is_opened():
+            #print "Already closed: %d"%self.hid_handle
             return
-        #print "Closing: %d"%self.hidHandle
-        self.__openStatus = False
+        #print "Closing: %d"%self.hid_handle
+        self.__open_status = False
 
         #finish reading thread
-        if self.__readingThread and self.__readingThread.isAlive():
-            self.__readingThread.abort()
-            self.__readingThread = None
-
+        if self.__reading_thread and self.__reading_thread.is_alive():
+            self.__reading_thread.abort()
+        
         #avoid posting new reports
-        if self._inputReportQueue:
-            self._inputReportQueue.release_events() #allow thead deadlocks
+        if self._input_report_queue:
+            self._input_report_queue.release_events() #allow thead deadlocks
+            
         #input report processor
-        if self.__inputProcessingThread and self.__inputProcessingThread.isAlive():
-            self.__inputProcessingThread.abort()
-            self.__inputProcessingThread = None
+        if self.__input_processing_thread and \
+                self.__input_processing_thread.is_alive():
+            self.__input_processing_thread.abort()
+            
         #properly close api handlers and pointers
-        if self.pPreparsedData:
-            hidDll.HidD_FreePreparsedData(self.pPreparsedData)
-        if self.hidHandle:
-            CloseHandle(self.hidHandle)
+        if self.ptr_preparsed_data:
+            hid_dll.HidD_FreePreparsedData(self.ptr_preparsed_data)
+        if self.hid_handle:
+            CloseHandle(self.hid_handle)
+            
         #reset vars (for gc)
-        self.__resetVars()
+        self.__reset_vars()
 
     def __del__(self):
-        if self.isOpened():
-            self.Close()
-
-    class HidReport(object):
-        """This class interfaces an actual HID physical report, providing a wrapper that exposes
-        specific usages (usage page and usage ID) as a usageIdvalue map (dictionary).
-        Example: A HID device might have an output report ID = 0x01, with the following usages;
-        0x20 as a boolean (button), and 0x21 as a 3 bit value, then querying the HID object
-        for the output report (by using hidObj.getOutputReport(0x01))
-        """
-        class ReportItem(object):
-            def __init__(self, hidReport, capsRecord, usageId = 0):
-                #assert(type(usageId) == type(1) or type(usageId) == type(1L)), "Numeric values of usageId only"
-                self.hidReport = hidReport #from here we can get the parent hidObject
-                self.capsRecord = capsRecord
-                self.__isButton = isinstance(capsRecord, HIDP_BUTTON_CAPS)
-                self.__isValue = isinstance(capsRecord, HIDP_VALUE_CAPS)
-                self.__isValueArray = bool(self.__isValue and capsRecord.ReportCount > 1)
-                self.__bitSize = 1
-                self.__reportCount = 1
-                if not usageId:
-                    assert(not capsRecord.IsRange), "usageId should be supplied for range items"
-                    self.usageId = capsRecord.union.NotRange.Usage
-                else:
-                    self.usageId = usageId
-                self.__reportId = c_byte(capsRecord.ReportID)
-                self.pageId = capsRecord.UsagePage
-                self.__value = 0
-                if capsRecord.IsRange:
-                    #reference to usage within usage range
-                    union = capsRecord.union.Range
-                    offset = union.UsageMin - usageId
-                    self.dataIndex = union.DataIndexMin + offset
-                    self.stringIndex = union.StringMin + offset
-                    self.designatorIndex = union.DesignatorMin + offset
-                else:
-                    #straigth reference
-                    union = capsRecord.union.NotRange
-                    self.dataIndex = union.DataIndex
-                    self.stringIndex = union.StringIndex
-                    self.designatorIndex = union.DesignatorIndex
-                #verify it item is value array
-                if self.__isValue:
-                    if self.__isValueArray:
-                        byteSize = (capsRecord.BitSize * capsRecord.ReportCount) / 8
-                        if (capsRecord.BitSize * capsRecord.ReportCount) % 8: #remainder
-                            byteSize += 1
-                        valueType = c_byte * byteSize
-                        self.__value = valueType()
-                    self.__bitSize = capsRecord.BitSize
-                    self.__reportCount = capsRecord.ReportCount
-
-            def __len__(self):
-                return self.__reportCount
-
-            def __setitem__(self, index, value):
-                "Allow to access value array by index"
-                if not self.__isValueArray:
-                    raise ValueError("Report item is not value usage array")
-                if index < self.__reportCount:
-                    byteIndex = (index * self.__bitSize) / 8
-                    bitOffset = (index * self.__bitSize) % 8
-                    bitValue = (value & ((1 << self.__bitSize) - 1)) << bitOffset
-                    self.__value[byteIndex] &= bitValue
-                    self.__value[byteIndex] |= bitValue
-                else:
-                    raise IndexError
-
-            def __getitem__(self, index):
-                "Allow to access value array by index"
-                if not self.__isValueArray:
-                    raise ValueError("Report item is not value usage array")
-                if index < self.__reportCount:
-                    byteIndex = (index * self.__bitSize) / 8
-                    bitOffset = (index * self.__bitSize) % 8
-                    return ((self.__value[byteIndex] >> bitOffset) & self.__bitSize )
-                else:
-                    raise IndexError
-
-            def setValue(self, value):
-                if self.__isValueArray:
-                    if len(value) == self.__reportCount:
-                        for index, item in enumerate(value):
-                            self.__setitem__(index, item)
-                    else:
-                        raise ValueError("Value size should match report item size length")
-                else:
-                    self.__value = value & ((1 << self.__bitSize) - 1) #valid bits only
-
-            def getValue(self):
-                if self.__isValueArray:
-                    if self.__bitSize == 8: #matching c_byte
-                        return list(self.__value)
-                    else:
-                        result = []
-                        for i in range(self.__reportCount):
-                            result.append(self.__getitem__(i))
-                        return result
-                else:
-                    return self.__value
-            #value property
-            value = property(getValue, setValue)
-
-            @property
-            def valueArray(self):
-                #read only property
-                return self.__value
-
-            def key(self):
-                "returns unique usage page & id long value"
-                return (self.pageId << 16) | self.usageId
-
-            def isValue(self):
-                return self.__isValue
-
-            def isButton(self):
-                return self.__isButton
-
-            def isValueArray(self):
-                return self.__isValueArray
-
-            def getUsageString(self):
-                "Returns usage representation string (as embeded in HID device if available)"
-                if self.stringIndex:
-                    MAX_HID_STRING_LENGTH = 128
-                    strUsageType = c_wchar * MAX_HID_STRING_LENGTH #128 max string length
-                    buffer = strUsageType()
-                    hidDll.HidD_GetIndexedString(self.hidReport.getHidObject(), self.stringIndex,
-                        byref(buffer), MAX_HID_STRING_LENGTH-1)
-                    return buffer.value
-                return ""
-
-            def __repr__(self):
-                r = []
-                if self.stringIndex:
-                    r.append( self.getUsageString() )
-                r.append( "pageId=%s"%hex(self.pageId) )
-                r.append( "usageId=%s"%hex(self.usageId) )
-                #r.append( "dataIndex=%s"%self.dataIndex )
-                #r.append( "reportId=%s"%hex(self.__reportId.value) )
-                if self.__value != None:
-                    r.append( "value=%s)"%hex(self.__value) )
-                else:
-                    r.append( "value=[None])" )
-                usageType = ""
-                if self.isButton():
-                    usageType = "Button"
-                elif self.isValue():
-                    usageType = "Value"
-                return usageType + "Usage item, %s (" % hex(getFullUsageId(self.pageId, self.usageId)) + ', '.join(r) + ')'
-        #class ReportItem finishes ***********************
-
-        def __init__(self, hidObj, reportType, reportId):
-            if reportType == HidP_Input:
-                self.__rawReportSize = hidObj.hidCaps.InputReportByteLength
-            elif reportType == HidP_Output:
-                self.__rawReportSize = hidObj.hidCaps.OutputReportByteLength
-            elif reportType == HidP_Feature:
-                self.__rawReportSize = hidObj.hidCaps.FeatureReportByteLength
-            else:
-                raise HIDError("Unsupported report type")
-            self.__reportType = reportType  #target report type
-            self.__valueArrayItems = list() #array of usages items
-            self.__hidObj = hidObj      #parent hid object
-            self.__reportId = c_byte(reportId)  #target report Id
-            self.__items = dict()       #access items by 'full usage' key
-            self.__indexItems = dict()  #access internal items by HID dll usage index
-            self.__rawData = None       #buffer storage (if needed)
-            self.__usageDataList = None #hid api HIDP_DATA array (if allocated)
-            #build report items list, browse parent hid object for report items
-            for item in hidObj.usagesStorage.get(reportType, []):
-                if item.ReportID == reportId:
-                    if not item.IsRange:
-                        #regular 'single' usage
-                        reportItem = self.ReportItem(self, item)
-                        self.__items[reportItem.key()] = reportItem
-                        self.__indexItems[reportItem.dataIndex] = reportItem
-                        if reportItem.isValueArray():
-                            self.__bAnyValueArray = True
-                    else:
-                        for usageId in range(item.union.Range.UsageMin, item.union.Range.UsageMax):
-                            reportItem =  self.ReportItem(self, item, usageId)
-                            self.__items[reportItem.key()] = reportItem
-                            self.__indexItems[reportItem.dataIndex] = reportItem
-                    #item is value array?
-                    if isinstance(item, HIDP_VALUE_CAPS) and item.ReportCount > 1:
-                        self.__valueArrayItems.append(reportItem)
-                #
-            #
-        __reportTypeDict = {
-            HidP_Input: "Input",
-            HidP_Output: "Output",
-            HidP_Feature: "Feature",
-        }
-        #read only properties
-        @property
-        def reportId(self):
-            return self.__reportId.value
-
-        @property
-        def reportType(self):
-            return self.__reportTypeDict[self.__reportType]
-
-        @property
-        def hidObject(self):
-            return self.__hidObject
-
-        def __repr__(self):
-            return "HID report object (%s report, id=0x%02x), %d items included" \
-                % (self.reportType, self.__reportId.value, len(self.__items) )
-
-        def __getitem__(self, key):
-            if isinstance(key, self.ReportItem):
-                key = key.key()
-            return self.__items[key]
-
-        def __contains__(self, key):
-            if isinstance(key, self.ReportItem):
-                key = key.key()
-            return key in self.__items
-
-        def __len__(self):
-            return len(self.__items)
-
-        def has_key(self, key):
-            return self.__contains__(key)
-
-        def items(self):
-            return self.__items.items()
-
-        def keys(self):
-            return self.__items.keys()
-
-        def values(self):
-            return self.__items.values()
-
-        def getHidObject(self):
-            return self.__hidObj
-
-        def getUsages(self):
-            "Return a dictionary mapping full usages Ids to plain values"
-            retValue = dict()
-            for key, usage in self.items():
-                retValue[key] = usage.value
-            return retValue
-
-        def setRawData(self, rawData):
-            """Set usage values based on given raw data, item[0] is reportId, lenght should match 'rawDataLength' value,
-            best performance if rawData is c_byte ctypes array object type"""
-            #pre-parsed data should exist
-            if not self.__hidObj.pPreparsedData:
-                raise HIDError("HID object close or unable to request preparsed report data")
-            #valid lenght
-            if len(rawData) != self.__rawReportSize:
-                raise HIDError("Report size has to be %d elements (bytes)" % self.__rawReportSize)
-
-            #allocate c_byte storage
-            if self.__rawData == None: #first time only, create storage
-                rawDataType = c_byte * self.__rawReportSize
-                self.__rawData = rawDataType()
-            else:
-                #initialize
-                ctypes.memset(self.__rawData, 0, len(self.__rawData))
-            #convert types if not appropiate
-            for index, value in enumerate(rawData):
-                self.__rawData[index] = rawData[index]
-            if not self.__usageDataList: # create HIDP_DATA buffer
-                maxItems = hidDll.HidP_MaxDataListLength(self.__reportType, self.__hidObj.pPreparsedData)
-                dataListType = HIDP_DATA * maxItems
-                self.__usageDataList = dataListType()
-            #reference HIDP_DATA bufer
-            dataList = self.__usageDataList
-            dataLen = c_ulong(len(dataList))
-
-            #reset old values
-            for item in self.values():
-                if item.isValueArray():
-                    item.value = [0,]*len(item)
-                else:
-                    item.value = 0
-            #ready, parse raw data
-            HIDP_STATUS( hidDll.HidP_GetData(self.__reportType, byref(dataList), byref(dataLen), self.__hidObj.pPreparsedData,
-                byref(self.__rawData), len(self.__rawData)) )
-            #set values on internal report item objects
-            for idx in range(dataLen.value):
-                valueItem = dataList[idx]
-                reportItem = self.__indexItems.get(valueItem.DataIndex)
-                if not reportItem:
-                    #TODO: This is not expected to happen
-                    continue
-                if reportItem.isValue():
-                    reportItem.value = valueItem.Value.RawValue
-                elif reportItem.isButton():
-                    reportItem.value = valueItem.Value.On
-                else:
-                    pass # HID api should give us either, at least one of 'em
-            #get values of array items
-            for item in self.__valueArrayItems:
-                #ask hid api to parse
-                HIDP_STATUS( hidDll.HidP_GetUsageValueArray(self.__reportType, item.pageId,
-                    0, #link collection
-                    item.usageId, #short usage
-                    byref(item.valueArray), #output data (c_byte storage)
-                    len(item.valueArray), self.__hidObj.pPreparsedData, byref(rawData), sizeof(rawData)) )
-                #
-                #print list(item.valueArray)
-
-        class ReadOnlyList(UserList):
-            "Read only sequence wrapper"
-            def __init__(self, anyList):
-                UserList.__init__(self, anyList)
-            def __setitem__(self, index, value):
-                raise ValueError("Object is read-only")
-
-        def __prepareRawData(self):
-            "Format internal __rawData storage according to usages setting"
-            #pre-parsed data should exist
-            if not self.__hidObj.pPreparsedData:
-                raise HIDError("HID object close or unable to request preparsed report data")
-            #allocate c_byte storage
-            if self.__rawData == None: #first time only, create storage
-                rawDataType = c_byte * self.__rawReportSize
-                self.__rawData = rawDataType()
-            else:
-                #initialize
-                ctypes.memset(self.__rawData, 0, len(self.__rawData))
-            try:
-                HIDP_STATUS( hidDll.HidP_InitializeReportForID(self.__reportType, self.__reportId, self.__hidObj.pPreparsedData,
-                    byref(self.__rawData), self.__rawReportSize) )
-                #
-            except HIDError:
-                self.__rawData[0] = self.__reportId
-            #check if we have pre-allocated usage storage
-            if not self.__usageDataList: # create HIDP_DATA buffer
-                maxItems = hidDll.HidP_MaxDataListLength(self.__reportType, self.__hidObj.pPreparsedData)
-                if not maxItems:
-                    raise HIDError("Internal error while requesing usage length")
-                dataListType = HIDP_DATA * maxItems
-                self.__usageDataList = dataListType()
-            #reference HIDP_DATA bufer
-            dataList = self.__usageDataList
-            #set buttons and values usages first
-            nTotalUsages = 0
-            singleUsage = USAGE()
-            singleUsageLen = c_ulong()
-            for dataIndex, reportItem in self.__indexItems.items():
-                if (not reportItem.isValueArray()) and reportItem.value != None:
-                    #set by user, include in request
-                    if reportItem.isButton() and reportItem.value:
-                        #windows just can't handle button arrays!, we just don't know if usage
-                        #is button array or plain single usage, so we set all usages at once
-                        singleUsage.value = reportItem.usageId
-                        singleUsageLen.value = 1
-                        HIDP_STATUS( hidDll.HidP_SetUsages(self.__reportType, reportItem.pageId, 0,
-                            byref(singleUsage), byref(singleUsageLen), self.__hidObj.pPreparsedData,
-                            byref(self.__rawData), self.__rawReportSize) )
-                        continue
-                    elif reportItem.isValue() and not reportItem.isValueArray():
-                        dataList[nTotalUsages].Value.RawValue = reportItem.value
-                    else:
-                        continue #do nothing
-                    dataList[nTotalUsages].Reserved = 0 #reset
-                    dataList[nTotalUsages].DataIndex = dataIndex #reference
-                    nTotalUsages += 1
-            #set data if any usage is not 'none' (and not any value array)
-            if nTotalUsages:
-                #some usages set
-                usageLen = c_ulong(nTotalUsages)
-                HIDP_STATUS( hidDll.HidP_SetData(self.__reportType, byref(dataList), byref(usageLen), self.__hidObj.pPreparsedData,
-                    byref(self.__rawData), self.__rawReportSize) )
-            #set values based on value arrays
-            for reportItem in self.__valueArrayItems:
-                HIDP_STATUS( hidDll.HidP_SetUsageValueArray(self.__reportType, reportItem.pageId,
-                    0, #all link collections
-                    reportItem.usageId,
-                    byref(reportItem.valueArray),
-                    len(reportItem.valueArray),
-                    self.__hidObj.pPreparsedData, byref(self.__rawData), len(self.__rawData)) )
-
-        def getRawData(self):
-            """Get raw HID report based on internal report item settings, creates new c_bytes storage"""
-            if self.__reportType != HidP_Output and self.__reportType != HidP_Feature:
-                raise HidError("Only for output or feature reports")
-            self.__prepareRawData()
-            #return read-only object for internal storage
-            return self.ReadOnlyList(self.__rawData)
-
-        def Send(self, rawData = None, bRefreshItems = False):
-            "Prepare HID raw report (unless rawData is provided) and send it to HID device"
-            if self.__reportType != HidP_Output and self.__reportType != HidP_Feature:
-                raise HidError("Only for output or feature reports")
-            #valid lenght
-            if rawData and (len(rawData) != self.__rawReportSize):
-                raise HIDError("Report size has to be %d elements (bytes)" % self.__rawReportSize)
-            #shold be valid report id
-            if rawData and rawData[0] != self.__reportId:
-                raise HIDError("Not matching report id")
-            #
-            if self.__reportType != HidP_Output and self.__reportType != HidP_Feature:
-                raise HidError("Can only send output or feature reports")
-            #
-            #convert types if not appropiate
-            if not rawData:
-                self.__prepareRawData()
-            elif not ( isinstance(rawData, ctypes.Array) and issubclass(rawData._type_, c_byte) ):
-                if self.__rawData == None: #first time only, create storage
-                    rawDataType = c_byte * len(rawData)
-                    self.__rawData = rawDataType()
-                for index, value in enumerate(rawData):
-                    self.__rawData[index] = rawData[index]
-            #reference proper object
-            rawData = self.__rawData
-            if self.__reportType == HidP_Output:
-                self.__hidObj.SendOutputReport(rawData)
-            elif self.__reportType == HidP_Feature:
-                self.__hidObj.SendFeatureReport(rawData)
-            else:
-                pass #can't get here (yet)
-
-        def Get(self, bProcessRawReport = True):
-            "Read report from device"
-            if self.__reportType != HidP_Input and self.__reportType != HidP_Feature:
-                raise HidError("Only for input or feature reports")
-            #allocate c_byte storage
-            if self.__rawData == None: #first time only, create storage
-                rawDataType = c_byte * self.__rawReportSize
-                self.__rawData = rawDataType()
-            else:
-                #initialize
-                ctypes.memset(self.__rawData, 0, len(self.__rawData))
-            rawData = self.__rawData
-            rawData[0] = self.__reportId
-            readFunction = None
-            if self.__reportType == HidP_Feature:
-                readFunction = hidDll.HidD_GetFeature
-            elif self.__reportType == HidP_Input:
-                readFunction = hidDll.HidD_GetInputReport
-            if readFunction and readFunction(int(self.__hidObj.hidHandle), byref(rawData), len(rawData)):
-                #success
-                if bProcessRawReport:
-                    self.__hidObj._processRawReport(rawData)
-                return self.ReadOnlyList(rawData)
-            return self.ReadOnlyList([])
-
-        #class HIDReport finishes ***********************
-
-    def __findReports(self, reportType, usagePage, usageId = 0):
+        if self.is_opened():
+            self.close()
+            
+    def __find_reports(self, report_type, usage_page, usage_id = 0):
         "Find input report referencing HID usage control/data item"
-        if not self.isOpened():
+        if not self.is_opened():
             raise HIDError("Device must be opened")
         #
         results = list()
-        if usagePage:
-            for reportId in self.reportSet.get(reportType, set()):
-                #build report object, gathering usages matching reportId
-                reportObj = HidDevice.HidReport(self, reportType, reportId)
-                if getFullUsageId(usagePage, usageId) in reportObj:
-                    results.append( reportObj )
+        if usage_page:
+            for report_id in self.report_set.get( report_type, set() ):
+                #build report object, gathering usages matching report_id
+                report_obj = HidReport(self, report_type, report_id)
+                if get_full_usage_id(usage_page, usage_id) in report_obj:
+                    results.append( report_obj )
         else:
             #all (any one)
-            for reportId in self.reportSet.get(reportType, set()):
-                reportObj = HidDevice.HidReport(self, reportType, reportId)
-                results.append( reportObj )
+            for report_id in self.report_set.get(report_type, set()):
+                report_obj = HidReport(self, report_type, report_id)
+                results.append( report_obj )
         return results
 
-    def countAllFeatureReports(self):
-        return self.hidCaps.NumberFeatureButtonCaps + self.hidCaps.NumberFeatureValueCaps
+    def count_all_feature_reports(self):
+        return self.hid_caps.number_feature_button_caps + \
+            self.hid_caps.number_feature_value_caps
 
-    def findInputReports(self, usagePage = 0, usageId = 0):
+    def find_input_reports(self, usage_page = 0, usage_id = 0):
         "Find input reports referencing HID usage item"
-        return self.__findReports(HidP_Input, usagePage, usageId)
+        return self.__find_reports(HidP_Input, usage_page, usage_id)
 
-    def findOutputReports(self, usagePage = 0, usageId = 0):
+    def find_output_reports(self, usage_page = 0, usage_id = 0):
         "Find output report referencing HID usage control/data item"
-        return self.__findReports(HidP_Output, usagePage, usageId)
+        return self.__find_reports(HidP_Output, usage_page, usage_id)
 
-    def findFeatureReports(self, usagePage = 0, usageId = 0):
+    def find_feature_reports(self, usage_page = 0, usage_id = 0):
         "Find feature report referencing HID usage control/data item"
-        return self.__findReports(HidP_Feature, usagePage, usageId)
+        return self.__find_reports(HidP_Feature, usage_page, usage_id)
 
-    def findAnyReports(self, usagePage = 0, usageId = 0):
-        """Find any report type referencing HID usage control/data item
-        Results are returned in a dictionary mapping reportType to usage lists"""
-        result = []
+    def find_any_reports(self, usage_page = 0, usage_id = 0):
+        """Find any report type referencing HID usage control/data item.
+        Results are returned in a dictionary mapping report_type to usage 
+        lists.
+        """
         items = [
-            (HidP_Input,    self.FindInputReport(usagePage, usageId)),
-            (HidP_Output,   self.FindOutputReport(usagePage, usageId)),
-            (HidP_Feature,  self.FindFeatureReport(usagePage, usageId)),
+            (HidP_Input,    self.find_input_reports(usage_page, usage_id)),
+            (HidP_Output,   self.find_output_reports(usage_page, usage_id)),
+            (HidP_Feature,  self.find_feature_reports(usage_page, usage_id)),
         ]
-        return dict([(t,r) for t,r in items if r])
+        return dict([(t, r) for t, r in items if r])
 
-    maxInputQueueSize = 20
+    max_input_queue_size = 20
     evt_decision = {
-        #a=oldValue, b=newValue
+        #a=old_value, b=new_value
         HID_EVT_NONE:       lambda a,b: False,
         HID_EVT_ALL:        lambda a,b: True, #usage in report
         HID_EVT_CHANGED:    lambda a,b: a != b,
@@ -990,280 +633,776 @@ class HidDevice(HidDeviceBaseClass):
         HID_EVT_CLEAR:      lambda a,b: not b,
     }
 
-    @synchronized(HidDeviceBaseClass._rawReportsLock)
-    def _processRawReport(self, rawReport):
+    @synchronized(HidDeviceBaseClass._raw_reports_lock)
+    def _process_raw_report(self, raw_report):
         "Default raw input report data handler"
-        myDebug = False
-        if not self.__evtHandlers or not self.isOpened():
+        my_debug = False
+        if not self.__evt_handlers or not self.is_opened():
             return
 
-        if not rawReport[0] and not hidDevicePathExists(self.devicePath):
+        if not raw_report[0] and \
+                not hid_device_path_exists(self.device_path):
             #windows XP sends empty report when disconnecting
-            self.Close() #device disconnected
+            self.close() #device disconnected
             return
         #used pre-parsed report templates
-        reportTemplate = self.__inputReportTemplates[rawReport[0]] #by report id
+        #by report id
+        report_template = self.__input_report_templates[raw_report[0]] 
         #old condition
-        oldValues = reportTemplate.getUsages()
+        old_values = report_template.get_usages()
         #parset incomming data
-        reportTemplate.setRawData(rawReport)
+        report_template.set_raw_data(raw_report)
         #get new data
-        newValues = reportTemplate.getUsages()
+        new_values = report_template.get_usages()
         #now diff
         event_applies = self.evt_decision
-        for key in newValues:
-            if key in self.__evtHandlers:
+        for key in new_values:
+            if key in self.__evt_handlers:
                 #check if event handler exist!
-                for eventType, handlers in self.__evtHandlers[key].items(): #key=eventType, values=handler set
-                    newValue = newValues[key]
-                    if event_applies[eventType](oldValues[key], newValue):
+                for event_kind, handlers in self.__evt_handlers[key].items():
+                    #key=event_kind, values=handler set
+                    new_value = new_values[key]
+                    if event_applies[event_kind](old_values[key], new_value):
                         #decison applies, call handlers
-                        for hFcnt in handlers:
-                            hFcnt(newValue, eventType)
-        if myDebug:
+                        for function_handler in handlers:
+                            function_handler(new_value, event_kind)
+        if my_debug:
             print 'HID report:',
-            for item in rawReport:
+            for item in raw_report:
                 print hex(item),
             print '\n'
 
-    def findInputUsage(self, fullUsageId):
+    def find_input_usage(self, full_usage_id):
         "Check if full usage Id included in input reports set"
-        for reportId, reportObj in self.__inputReportTemplates.items():
-            if fullUsageId in reportObj:
-                return reportId
+        for report_id, report_obj in self.__input_report_templates.items():
+            if full_usage_id in report_obj:
+                return report_id
         return 0
 
-    def addEventHandler(self, fullUsageId, handlerFunction, eventType = HID_EVT_ALL):
+    def add_event_handler(self, full_usage_id, handler_function, 
+            event_kind = HID_EVT_ALL):
         "Add event handler for usage value/button changes"
-        if not self.findInputUsage(fullUsageId):
+        if not self.find_input_usage(full_usage_id):
             #do not add handler
             return
         #get dict for full usages
-        topMapHandler = self.__evtHandlers.get(fullUsageId, dict())
-        eventHandlerSet = topMapHandler.get(eventType, set())
-        if handlerFunction not in eventHandlerSet:
+        top_map_handler = self.__evt_handlers.get(full_usage_id, dict())
+        event_handler_set = top_map_handler.get(event_kind, set())
+        if handler_function not in event_handler_set:
             #add a new handler
-            eventHandlerSet.add(handlerFunction)
-        if eventType not in topMapHandler:
-            topMapHandler[eventType] = eventHandlerSet
-        if fullUsageId not in self.__evtHandlers:
-            self.__evtHandlers[fullUsageId] = topMapHandler
+            event_handler_set.add(handler_function)
+        if event_kind not in top_map_handler:
+            top_map_handler[event_kind] = event_handler_set
+        if full_usage_id not in self.__evt_handlers:
+            self.__evt_handlers[full_usage_id] = top_map_handler
 
     class InputReportQueue(object):
-        def __init__(self, maxSize, reportSize):
-            self.__lockedDown = False
-            self.maxSize = maxSize
-            self.bufReportType = c_byte * reportSize
-            self.usedQueue = []
-            self.freshQueue = []
-            self.usedLock = threading.Lock()
-            self.freshLock = threading.Lock()
-            self.freshChangedEvent = threading.Event()
+        def __init__(self, max_size, report_size):
+            self.__locked_down = False
+            self.max_size = max_size
+            self.repport_buffer_type = c_byte * report_size
+            self.used_queue = []
+            self.fresh_queue = []
+            self.used_lock = threading.Lock()
+            self.fresh_lock = threading.Lock()
+            self.fresh_changed_event = threading.Event()
 
         #@logging_decorator
-        def getNew(self):
+        def get_new(self):
             "Allocates storage for input report"
-            if self.__lockedDown:
+            if self.__locked_down:
                 return None
-            self.usedLock.acquire()
-            if len(self.usedQueue):
+            self.used_lock.acquire()
+            if len(self.used_queue):
                 #we can reuse items
-                emptyReport = self.usedQueue.pop(0)
-                if not self.freshQueue and self.usedQueue:
-                    #the consumer thread seems now faster than the producers, so...
-                    del emptyReport
-                    emptyReport = self.usedQueue.pop(0) #reduce the spare buffers queue
-                self.usedLock.release()
-                ctypes.memset(emptyReport, 0, sizeof(emptyReport))
+                empty_report = self.used_queue.pop(0)
+                if not self.fresh_queue and self.used_queue:
+                    # the consumer thread seems now faster than the producers, 
+                    # so...
+                    del empty_report
+                    #reduce the spare buffers queue
+                    empty_report = self.used_queue.pop(0)
+                self.used_lock.release()
+                ctypes.memset(empty_report, 0, sizeof(empty_report))
             else:
-                self.usedLock.release()
+                self.used_lock.release()
                 #create brand new storage
-                emptyReport = self.bufReportType() #auto initialized to '0' by ctypes
-            return emptyReport
+                #auto initialized to '0' by ctypes
+                empty_report = self.repport_buffer_type()
+            return empty_report
 
         #@logging_decorator
-        def post(self, rawReport):
-            if self.__lockedDown:
+        def post(self, raw_report):
+            if self.__locked_down:
                 return
             while True:
-                self.freshLock.acquire()
-                if len(self.freshQueue) >= self.maxSize:
-                    self.freshLock.release()
-                    self.freshChangedEvent.wait()
-                    if self.__lockedDown:
+                self.fresh_lock.acquire()
+                if len(self.fresh_queue) >= self.max_size:
+                    self.fresh_lock.release()
+                    self.fresh_changed_event.wait()
+                    if self.__locked_down:
                         return
-                    self.freshChangedEvent.clear()
+                    self.fresh_changed_event.clear()
                     continue
                 break
-            self.freshQueue.append( rawReport )
-            self.freshLock.release()
-            self.freshChangedEvent.set()
+            self.fresh_queue.append( raw_report )
+            self.fresh_lock.release()
+            self.fresh_changed_event.set()
 
-        def reuse(self, rawReport):
+        def reuse(self, raw_report):
             "Reuse not posted report"
-            if self.__lockedDown:
+            if self.__locked_down:
                 return
-            self.usedLock.acquire()
+            self.used_lock.acquire()
             #we can reuse this item
-            self.usedQueue.append(rawReport)
-            self.usedLock.release()
+            self.used_queue.append(raw_report)
+            self.used_lock.release()
 
         #@logging_decorator
         def get(self):
-            if self.__lockedDown:
+            if self.__locked_down:
                 return None
             while True:
-                self.freshLock.acquire()
-                if not self.freshQueue: # resource locked but no data!
-                    self.freshLock.release()
-                    self.freshChangedEvent.wait()
-                    if self.__lockedDown:
+                self.fresh_lock.acquire()
+                if not self.fresh_queue: # resource locked but no data!
+                    self.fresh_lock.release()
+                    self.fresh_changed_event.wait()
+                    if self.__locked_down:
                         return None
-                    self.freshChangedEvent.clear()
+                    self.fresh_changed_event.clear()
                     continue
                 break
-            item = self.freshQueue.pop(0)
-            self.freshLock.release()
-            self.freshChangedEvent.set()
+            item = self.fresh_queue.pop(0)
+            self.fresh_lock.release()
+            self.fresh_changed_event.set()
             return item
 
         def release_events(self):
-            self.__lockedDown = True
-            self.freshChangedEvent.set()
+            self.__locked_down = True
+            self.fresh_changed_event.set()
 
     class InputReportProcessingThread(threading.Thread):
         "Input reports handler helper class"
-        def __init__(self, hidObj):
+        def __init__(self, hid_object):
             threading.Thread.__init__(self)
             self.__abort = False
-            self.hidObj = hidObj
+            self.hid_object = hid_object
             self.start()
 
         def abort(self):
             self.__abort = True
-            maxTime = 1.0
-            while maxTime > 0.0 and self.isAlive():
+            max_time = 1.0
+            while max_time > 0.0 and self.is_alive():
                 time.sleep(0.050)
-                maxTime -= 0.050
+                max_time -= 0.050
 
         def run(self):
-            hidObj = self.hidObj
-            while hidObj.isOpened() and not self.__abort:
-                rawReport = hidObj._inputReportQueue.get()
-                if not rawReport: continue
-                hidObj._processRawReport(rawReport)
+            hid_object = self.hid_object
+            while hid_object.is_opened() and not self.__abort:
+                raw_report = hid_object._input_report_queue.get()
+                if not raw_report: continue
+                hid_object._process_raw_report(raw_report)
 
         def __del__(self):
             self.abort()
 
     class InputReportReaderThread(threading.Thread):
         "Helper to receive input reports"
-        def __init__(self, hidObj, rawReportSize):
+        def __init__(self, hid_object, raw_report_size):
             threading.Thread.__init__(self)
             self.__abort = False
-            self.hidObj = hidObj
-            self.rawReportSize = rawReportSize
-            self.__overlappedReadObj = None
-            if self.rawReportSize:
+            self.hid_object = hid_object
+            self.raw_report_size = raw_report_size
+            self.__overlapped_read_obj = None
+            if self.raw_report_size:
                 self.start()
 
         def abort(self):
             if not self.__abort:
                 self.__abort = True
-            if self.isAlive() and self.__overlappedReadObj:
+            if self.is_alive() and self.__overlapped_read_obj:
                 # force overlapped events completition
-                SetEvent(self.__overlappedReadObj.hEvent)
-            maxTime = 1.0
-            while maxTime > 0 and self.isAlive():
+                SetEvent(self.__overlapped_read_obj.h_event)
+            max_time = 1.0
+            while max_time > 0 and self.is_alive():
                 time.sleep(0.050)
-                maxTime -= 0.050
+                max_time -= 0.050
 
         def __del__(self):
             self.abort() #make sure we do a clean exit
 
         def run(self):
-            reportLen = self.rawReportSize
-            if not self.rawReportSize:
-                #don't raise any error as the hid object can still be used for writing reports
-                raise HIDError("Attempting to read input reports on non capable HID device")
-
-            overRead = OVERLAPPED()
-            overRead.hEvent = CreateEvent(None, 0, 0, None)
-            if overRead.hEvent:
-                self.__overlappedReadObj = overRead
+            if not self.raw_report_size:
+                # don't raise any error as the hid object can still be used 
+                # for writing reports
+                raise HIDError("Attempting to read input reports on non "\
+                    "capable HID device")
+            
+            over_read = OVERLAPPED()
+            over_read.h_event = CreateEvent(None, 0, 0, None)
+            if over_read.h_event:
+                self.__overlapped_read_obj = over_read
             else:
                 raise HIDError("Error when create hid event resource")
 
-            bytesRead = c_ulong()
+            bytes_read = c_ulong()
             #
-            hidObj = self.hidObj
-            n = self.rawReportSize
-            #print "reader set: %d"%hidObj.hidHandle
+            hid_object = self.hid_object
+            n = self.raw_report_size
+            #print "reader set: %d"%hid_object.hid_handle
             while not self.__abort:
                 #get storage
-                bufReport = hidObj._inputReportQueue.getNew()
-                if not bufReport: continue
+                buf_report = hid_object._input_report_queue.get_new()
+                if not buf_report: continue
                 # async read from device
-                bytesRead.value = 0
+                bytes_read.value = 0
                 if self.__abort:
                     break
-                result = ReadFile(int(hidObj.hidHandle), byref(bufReport), int(n), byref(bytesRead), byref(self.__overlappedReadObj))
+                result = ReadFile(int(hid_object.hid_handle), 
+                    byref(buf_report), int(n), byref(bytes_read), 
+                    byref(self.__overlapped_read_obj) )
                 if result == NO_ERROR or result == ERROR_IO_PENDING:
                     #wait for event
                     if self.__abort:
                         break
-                    #print "rw: %d"%hidObj.hidHandle
-                    result = WaitForSingleObject(self.__overlappedReadObj.hEvent, INFINITE )
-                    #print "rf: %d"%hidObj.hidHandle
+                    #print "rw: %d"%hid_object.hid_handle
+                    result = WaitForSingleObject( \
+                        self.__overlapped_read_obj.h_event, 
+                        INFINITE )
+                    #print "rf: %d"%hid_object.hid_handle
                     if result != WAIT_OBJECT_0: #success
                         break #device has being disconnected
                 else:
                     error = ctypes.GetLastError()
                     if error == 997: #overlapped operation in progress
                         time.sleep(0.05) #HACKME: This aint pretty!, 50ms
-                        hidObj._inputReportQueue.reuse(bufReport)
+                        hid_object._input_report_queue.reuse(buf_report)
                         #print 'rc'
                         continue
-                    raise HIDError("Error %d when trying to read from HID device: %s"%(error, ctypes.FormatError(error)))
+                    raise HIDError("Error %d when trying to read from HID "\
+                        "device: %s"%(error, ctypes.FormatError(error)) )
                 # signal raw data already read
-                hidObj._inputReportQueue.post( bufReport )
+                hid_object._input_report_queue.post( buf_report )
             #clen up
-            overRead = self.__overlappedReadObj
-            self.__overlappedReadObj = None
-            CloseHandle(overRead.hEvent)
-            hidObj.Close()
-            #print "reader closed: %d"%hidObj.hidHandle
+            over_read = self.__overlapped_read_obj
+            self.__overlapped_read_obj = None
+            CloseHandle(over_read.h_event)
+            hid_object.close()
+            #print "reader closed: %d"%hid_object.hid_handle
 
     def __repr__(self):
-        return "HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, Path: %s"%(self.VendorId, self.ProductId, self.VersionNumber, self.ManufacturerStr, self.ProductStr, self.devicePath)
+        return "HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
+            "Path: %s" % (self.vendor_id, self.product_id, self.version_number,
+            self.vendor_name, self.product_name, self.device_path)
 
-if __name__ == '__main__':
+class ReportItem(object):
+    def __init__(self, hid_report, caps_record, usage_id = 0):
+        # from here we can get the parent hid_objectect
+        self.hid_report = hid_report
+        self.caps_record = caps_record
+        self.__is_button = isinstance(caps_record, HIDP_BUTTON_CAPS)
+        self.__is_value = isinstance(caps_record, HIDP_VALUE_CAPS)
+        self.__is_value_array = bool(self.__is_value and \
+            caps_record.report_count > 1)
+        self.__bit_size = 1
+        self.__report_count = 1
+        if not usage_id:
+            assert(not caps_record.is_range), \
+                "usage_id should be supplied for range items"
+            self.usage_id = caps_record.union.not_range.usage
+        else:
+            self.usage_id = usage_id
+        self.__report_id = c_byte(caps_record.report_id)
+        self.page_id = caps_record.usage_page
+        self.__value = 0
+        if caps_record.is_range:
+            #reference to usage within usage range
+            union = caps_record.union.range
+            offset = union.usage_min - usage_id
+            self.data_index = union.data_index_min + offset
+            self.string_index = union.string_min + offset
+            self.designator_index = union.designator_min + offset
+        else:
+            #straigth reference
+            union = caps_record.union.not_range
+            self.data_index = union.data_index
+            self.string_index = union.string_index
+            self.designator_index = union.designator_index
+        #verify it item is value array
+        if self.__is_value:
+            if self.__is_value_array:
+                byte_size = (caps_record.bit_size * caps_record.report_count) / 8
+                if (caps_record.bit_size * caps_record.report_count) % 8: 
+                    #remainder
+                    byte_size += 1
+                value_type = c_byte * byte_size
+                self.__value = value_type()
+            self.__bit_size = caps_record.bit_size
+            self.__report_count = caps_record.report_count
+
+    def __len__(self):
+        return self.__report_count
+
+    def __setitem__(self, index, value):
+        "Allow to access value array by index"
+        if not self.__is_value_array:
+            raise ValueError("Report item is not value usage array")
+        if index < self.__report_count:
+            byte_index = (index * self.__bit_size) / 8
+            byte_index = (index * self.__bit_size) % 8
+            bit_value = (value & ((1 << self.__bit_size) - 1)) << byte_index
+            self.__value[byte_index] &= bit_value
+            self.__value[byte_index] |= bit_value
+        else:
+            raise IndexError
+
+    def __getitem__(self, index):
+        "Allow to access value array by index"
+        if not self.__is_value_array:
+            raise ValueError("Report item is not value usage array")
+        if index < self.__report_count:
+            byte_index = (index * self.__bit_size) / 8
+            byte_index = (index * self.__bit_size) % 8
+            return ((self.__value[byte_index] >> byte_index) & self.__bit_size )
+        else:
+            raise IndexError
+
+    def set_value(self, value):
+        if self.__is_value_array:
+            if len(value) == self.__report_count:
+                for index, item in enumerate(value):
+                    self.__setitem__(index, item)
+            else:
+                raise ValueError("Value size should match report item size "\
+                    "length" )
+        else:
+            self.__value = value & ((1 << self.__bit_size) - 1) #valid bits only
+
+    def get_value(self):
+        if self.__is_value_array:
+            if self.__bit_size == 8: #matching c_byte
+                return list(self.__value)
+            else:
+                result = []
+                for i in range(self.__report_count):
+                    result.append(self.__getitem__(i))
+                return result
+        else:
+            return self.__value
+    #value property
+    value = property(get_value, set_value)
+
+    @property
+    def value_array(self):
+        #read only property
+        return self.__value
+
+    def key(self):
+        "returns unique usage page & id long value"
+        return (self.page_id << 16) | self.usage_id
+
+    def is_value(self):
+        return self.__is_value
+
+    def is_button(self):
+        return self.__is_button
+
+    def is_value_array(self):
+        return self.__is_value_array
+
+    def get_usage_string(self):
+        """Returns usage representation string (as embeded in HID device 
+        if available)
+        """
+        if self.string_index:
+            MAX_HID_STRING_LENGTH = 128
+            usage_string_type = c_wchar * MAX_HID_STRING_LENGTH 
+            # 128 max string length
+            abuffer = usage_string_type()
+            hid_dll.HidD_GetIndexedString(self.hid_report.get_hid_object(), 
+                self.string_index,
+                byref(abuffer), MAX_HID_STRING_LENGTH-1 )
+            return abuffer.value
+        return ""
+
+    def __repr__(self):
+        res = []
+        if self.string_index:
+            res.append( self.get_usage_string() )
+        res.append( "page_id=%s"%hex(self.page_id) )
+        res.append( "usage_id=%s"%hex(self.usage_id) )
+        if self.__value != None:
+            res.append( "value=%s)"%hex(self.__value) )
+        else:
+            res.append( "value=[None])" )
+        usage_type = ""
+        if self.is_button():
+            usage_type = "Button"
+        elif self.is_value():
+            usage_type = "Value"
+        return usage_type + "Usage item, %s (" % hex(get_full_usage_id ( \
+            self.page_id, self.usage_id)) + ', '.join(res) + ')'
+# class ReportItem finishes ***********************
+
+class HidReport(object):
+    """This class interfaces an actual HID physical report, providing a wrapper
+    that exposes specific usages (usage page and usage ID) as a usage_idvalue 
+    map (dictionary).
+    
+    Example: A HID device might have an output report ID = 0x01, with the 
+    following usages; 0x20 as a boolean (button), and 0x21 as a 3 bit value, 
+    then querying the HID object for the output report (by using 
+    hid_object.get_output_report(0x01))
+    """
+    #
+    def __init__(self, hid_object, report_type, report_id):
+        if report_type == HidP_Input:
+            self.__raw_report_size = hid_object.hid_caps.input_report_byte_length
+        elif report_type == HidP_Output:
+            self.__raw_report_size = hid_object.hid_caps.output_report_byte_length
+        elif report_type == HidP_Feature:
+            self.__raw_report_size = \
+                hid_object.hid_caps.feature_report_byte_length
+        else:
+            raise HIDError("Unsupported report type")
+        self.__report_kind = report_type  #target report type
+        self.__value_array_items = list() #array of usages items
+        self.__hid_object = hid_object      #parent hid object
+        self.__report_id = c_byte(report_id)  #target report Id
+        self.__items = dict()       #access items by 'full usage' key
+        self.__idx_items = dict()  #access internal items by HID dll usage idx
+        self.__raw_data = None       #buffer storage (if needed)
+        self.__usage_data_list = None #hid api HIDP_DATA array (if allocated)
+        #build report items list, browse parent hid object for report items
+        for item in hid_object.usages_storage.get(report_type, []):
+            if item.report_id == report_id:
+                if not item.is_range:
+                    #regular 'single' usage
+                    report_item = ReportItem(self, item)
+                    self.__items[report_item.key()] = report_item
+                    self.__idx_items[report_item.data_index] = report_item
+                else:
+                    for usage_id in range(item.union.range.usage_min, 
+                            item.union.range.usage_max):
+                        report_item =  ReportItem(self, item, usage_id)
+                        self.__items[report_item.key()] = report_item
+                        self.__idx_items[report_item.data_index] = report_item
+                #item is value array?
+                if isinstance(item, HIDP_VALUE_CAPS) and \
+                        item.report_count > 1:
+                    self.__value_array_items.append(report_item)
+            #
+        #
+    __report_kind_dict = {
+        HidP_Input: "Input",
+        HidP_Output: "Output",
+        HidP_Feature: "Feature",
+    }
+    #read only properties
+    @property
+    def report_id(self):
+        return self.__report_id.value
+
+    @property
+    def report_type(self):
+        return self.__report_kind_dict[self.__report_kind]
+
+    @property
+    def hid_objectect(self):
+        return self.__hid_object
+
+    def __repr__(self):
+        return "HID report object (%s report, id=0x%02x), %d items included" \
+            % (self.report_type, self.__report_id.value, len(self.__items) )
+
+    def __getitem__(self, key):
+        if isinstance(key, ReportItem):
+            key = key.key()
+        return self.__items[key]
+
+    def __contains__(self, key):
+        if isinstance(key, ReportItem):
+            key = key.key()
+        return key in self.__items
+
+    def __len__(self):
+        return len(self.__items)
+
+    def has_key(self, key):
+        return self.__contains__(key)
+
+    def items(self):
+        return self.__items.items()
+
+    def keys(self):
+        return self.__items.keys()
+
+    def values(self):
+        return self.__items.values()
+
+    def get_hid_object(self):
+        return self.__hid_object
+
+    def get_usages(self):
+        "Return a dictionary mapping full usages Ids to plain values"
+        result = dict()
+        for key, usage in self.items():
+            result[key] = usage.value
+        return result
+
+    def __alloc_raw_data(self, initial_values):
+        #allocate c_byte storage
+        if self.__raw_data == None: #first time only, create storage
+            raw_data_type = c_byte * self.__raw_report_size
+            self.__raw_data = raw_data_type()
+        else:
+            #initialize
+            ctypes.memset(self.__raw_data, 0, len(self.__raw_data))
+        if initial_values:
+            for index in range(len(initial_values)):
+                self.__raw_data[index] = initial_values[index]
+
+    def set_raw_data(self, raw_data):
+        """Set usage values based on given raw data, item[0] is report_id, 
+        lenght should match 'raw_data_length' value, best performance if 
+        raw_data is c_byte ctypes array object type
+        """
+        #pre-parsed data should exist
+        if not self.__hid_object.ptr_preparsed_data:
+            raise HIDError("HID object close or unable to request preparsed "\
+                "report data")
+        #valid lenght
+        if len(raw_data) != self.__raw_report_size:
+            raise HIDError( "Report size has to be %d elements (bytes)" \
+                % self.__raw_report_size )
+                
+        # copy to internal storage
+        self.__alloc_raw_data(raw_data)
+        
+        if not self.__usage_data_list: # create HIDP_DATA buffer
+            max_items = hid_dll.HidP_MaxDataListLength(self.__report_kind, 
+                self.__hid_object.ptr_preparsed_data)
+            data_list_type = HIDP_DATA * max_items
+            self.__usage_data_list = data_list_type()
+        #reference HIDP_DATA bufer
+        data_list = self.__usage_data_list
+        data_len = c_ulong(len(data_list))
+
+        #reset old values
+        for item in self.values():
+            if item.is_value_array():
+                item.value = [0, ]*len(item)
+            else:
+                item.value = 0
+        #ready, parse raw data
+        HidStatus( hid_dll.HidP_GetData(self.__report_kind, 
+            byref(data_list), byref(data_len), 
+            self.__hid_object.ptr_preparsed_data,
+            byref(self.__raw_data), len(self.__raw_data)) )
+            
+        #set values on internal report item objects
+        for idx in range(data_len.value):
+            value_item = data_list[idx]
+            report_item = self.__idx_items.get(value_item.data_index)
+            if not report_item:
+                # This is not expected to happen
+                continue
+            if report_item.is_value():
+                report_item.value = value_item.value.raw_value
+            elif report_item.is_button():
+                report_item.value = value_item.value.on
+            else:
+                pass # HID api should give us either, at least one of 'em
+        #get values of array items
+        for item in self.__value_array_items:
+            #ask hid api to parse
+            HidStatus( hid_dll.HidP_GetUsageValueArray(self.__report_kind, 
+                item.page_id,
+                0, #link collection
+                item.usage_id, #short usage
+                byref(item.value_array), #output data (c_byte storage)
+                len(item.value_array), self.__hid_object.ptr_preparsed_data, 
+                byref(raw_data), sizeof(raw_data)) )
+            #
+            #print list(item.value_array)
+            
+    def __prepare_raw_data(self):
+        "Format internal __raw_data storage according to usages setting"
+        #pre-parsed data should exist
+        if not self.__hid_object.ptr_preparsed_data:
+            raise HIDError("HID object close or unable to request preparsed "\
+                "report data")
+                
+        # make sure pre-memory allocation already done
+        self.__alloc_raw_data()
+        
+        try:
+            HidStatus( hid_dll.HidP_InitializeReportForID(self.__report_kind,
+                self.__report_id, self.__hid_object.ptr_preparsed_data,
+                byref(self.__raw_data), self.__raw_report_size) )
+            #
+        except HIDError:
+            self.__raw_data[0] = self.__report_id
+        #check if we have pre-allocated usage storage
+        if not self.__usage_data_list: # create HIDP_DATA buffer
+            max_items = hid_dll.HidP_MaxDataListLength(self.__report_kind, 
+                self.__hid_object.ptr_preparsed_data)
+            if not max_items:
+                raise HIDError("Internal error while requesing usage length")
+            data_list_type = HIDP_DATA * max_items
+            self.__usage_data_list = data_list_type()
+        #reference HIDP_DATA bufer
+        data_list = self.__usage_data_list
+        #set buttons and values usages first
+        n_total_usages = 0
+        single_usage = USAGE()
+        single_usage_len = c_ulong()
+        for data_index, report_item in self.__idx_items.items():
+            if (not report_item.is_value_array()) and \
+                    report_item.value != None:
+                #set by user, include in request
+                if report_item.is_button() and report_item.value:
+                    # windows just can't handle button arrays!, we just don't 
+                    # know if usage is button array or plain single usage, so 
+                    # we set all usages at once
+                    single_usage.value = report_item.usage_id
+                    single_usage_len.value = 1
+                    HidStatus( hid_dll.HidP_SetUsages(self.__report_kind, 
+                        report_item.page_id, 0,
+                        byref(single_usage), byref(single_usage_len), 
+                        self.__hid_object.ptr_preparsed_data,
+                        byref(self.__raw_data), self.__raw_report_size) )
+                    continue
+                elif report_item.is_value() and \
+                        not report_item.is_value_array():
+                    data_list[n_total_usages].value.raw_value = report_item.value
+                else:
+                    continue #do nothing
+                data_list[n_total_usages].reserved = 0 #reset
+                data_list[n_total_usages].data_index = data_index #reference
+                n_total_usages += 1
+        #set data if any usage is not 'none' (and not any value array)
+        if n_total_usages:
+            #some usages set
+            usage_len = c_ulong(n_total_usages)
+            HidStatus( hid_dll.HidP_SetData(self.__report_kind, 
+                byref(data_list), byref(usage_len), 
+                self.__hid_object.ptr_preparsed_data,
+                byref(self.__raw_data), self.__raw_report_size) )
+        #set values based on value arrays
+        for report_item in self.__value_array_items:
+            HidStatus( hid_dll.HidP_SetUsageValueArray(self.__report_kind, 
+                report_item.page_id,
+                0, #all link collections
+                report_item.usage_id,
+                byref(report_item.value_array),
+                len(report_item.value_array),
+                self.__hid_object.ptr_preparsed_data, byref(self.__raw_data), 
+                len(self.__raw_data)) )
+
+    def get_raw_data(self):
+        """Get raw HID report based on internal report item settings, 
+        creates new c_bytes storage
+        """
+        if self.__report_kind != HidP_Output \
+                and self.__report_kind != HidP_Feature:
+            raise HIDError("Only for output or feature reports")
+        self.__prepare_raw_data()
+        #return read-only object for internal storage
+        return ReadOnlyList(self.__raw_data)
+
+    def send(self, raw_data = None):
+        """Prepare HID raw report (unless raw_data is provided) and send 
+        it to HID device
+        """
+        if self.__report_kind != HidP_Output \
+                and self.__report_kind != HidP_Feature:
+            raise HIDError("Only for output or feature reports")
+        #valid lenght
+        if raw_data and (len(raw_data) != self.__raw_report_size):
+            raise HIDError("Report size has to be %d elements (bytes)" \
+                % self.__raw_report_size)
+        #shold be valid report id
+        if raw_data and raw_data[0] != self.__report_id:
+            raise HIDError("Not matching report id")
+        #
+        if self.__report_kind != HidP_Output and \
+                self.__report_kind != HidP_Feature:
+            raise HIDError("Can only send output or feature reports")
+        #
+        if not raw_data:
+            # we'll construct the raw report
+            self.__prepare_raw_data()
+        elif not ( isinstance(raw_data, ctypes.Array) and \
+                issubclass(raw_data._type_, c_byte) ):
+            # pre-memory allocation for performance
+            self.__alloc_raw_data(raw_data)
+        #reference proper object
+        raw_data = self.__raw_data
+        if self.__report_kind == HidP_Output:
+            self.__hid_object.send_output_report(raw_data)
+        elif self.__report_kind == HidP_Feature:
+            self.__hid_object.send_feature_report(raw_data)
+        else:
+            pass #can't get here (yet)
+
+    def get(self, do_process_raw_report = True):
+        "Read report from device"
+        if self.__report_kind != HidP_Input and \
+                self.__report_kind != HidP_Feature:
+            raise HIDError("Only for input or feature reports")
+        # pre-alloc raw data
+        self.__alloc_raw_data()
+        
+        # now use it
+        raw_data = self.__raw_data
+        raw_data[0] = self.__report_id
+        read_function = None
+        if self.__report_kind == HidP_Feature:
+            read_function = hid_dll.HidD_GetFeature
+        elif self.__report_kind == HidP_Input:
+            read_function = hid_dll.HidD_GetInputReport
+        if read_function and read_function( \
+                int(self.__hid_object.hid_handle),
+                byref(raw_data), len(raw_data) ):
+            #success
+            if do_process_raw_report:
+                self.__hid_object._process_raw_report(raw_data)
+            return ReadOnlyList(raw_data)
+        return ReadOnlyList([])
+    #class HIDReport finishes ***********************
+
+def simple_test():
     #simple test
-    from tools import writeDocumentation
-    allHids = findAllHidDevices()
-    if allHids:
+    from tools import write_documentation
+    all_hids = find_all_hid_devices()
+    if all_hids:
         print "Found HID class devices!, full details..."
-        for dev in allHids:
-            print dev, '\tPath:', dev.devicePath, '\n\tInstance:', dev.instanceId, '\n\t\Port (ID):', dev.getParentInstanceId(), '\n\tPort (str)', dev.getParentDevice()
+        for dev in all_hids:
+            print dev, '\tPath:', dev.device_path, \
+                '\n\tInstance:', dev.instance_id, \
+                '\n\t\Port (ID):', dev.get_parent_instance_id(), \
+                '\n\tPort (str)', dev.get_parent_device()
             #
             print "Checking caps..."
             print "-----------------"
             #
-            for dev in HidDeviceFilter().getDevices():
-                #dev = HidDeviceFilter(ManufacturerStrIncludes='Plantronics').getDevices()[1]
+            for dev in HidDeviceFilter().get_devices():
                 print '*', dev
                 try:
-                    dev.Open()
-                    readingOnly = False
-                    if not readingOnly:
-                        writeDocumentation(dev, sys.stdout)
+                    dev.open()
+                    reading_only = False
+                    if not reading_only:
+                        write_documentation(dev, sys.stdout)
                     else:
                         print "Waiting for data..."
-                        while dev.isOpened():
+                        while dev.is_opened():
                             pass
                         break
                 finally:
-                    dev.Close()
+                    dev.close()
     else:
         print "There's not any non system HID class device available"
 #
+if __name__ == '__main__':
+    simple_test()
