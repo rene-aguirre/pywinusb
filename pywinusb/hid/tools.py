@@ -21,7 +21,8 @@ def write_documentation(self, output_file):
                     curr_var = new_var
                 return new_var
     dev_vars = vars(self)
-    dev_vars['main_usage_str'] = repr( usage_pages.HidUsage(self.hid_caps.UsagePage, self.hid_caps.Usage) )
+    dev_vars['main_usage_str'] = repr(
+            usage_pages.HidUsage(self.hid_caps.usage_page, self.hid_caps.usage) )
     output_file.write( """\
 HID device documentation report
 ===============================
@@ -29,41 +30,41 @@ HID device documentation report
 Top Level Details
 -----------------
 
-Manufacturer String:    %(ManufacturerStr)s
-Product Sting:          %(ProductStr)s
+Manufacturer String:    %(vendor_name)s
+Product Sting:          %(product_name)s
 
-Vendor ID:              0x%(VendorId)04x
-Product ID:             0x%(ProductId)04x
-Version number:         0x%(VersionNumber)04x
+Vendor ID:              0x%(vendor_id)04x
+Product ID:             0x%(product_id)04x
+Version number:         0x%(version_number)04x
 
 Device Path:            %(device_path)s
 Device Instance Id:     %(instance_id)s
 Parent Instance Id:     %(parent_instance_id)s
 
-Top level usage:        Page=0x%(hid_caps.UsagePage)04x, Usage=0x%(hid_caps.Usage)02x
+Top level usage:        Page=0x%(hid_caps.usage_page)04x, Usage=0x%(hid_caps.usage)02x
 Usage identification:   %(main_usage_str)s
-Link collections:       %(hid_caps.NumberLinkCollectionNodes)d collection(s)
+Link collections:       %(hid_caps.number_link_collection_nodes)d collection(s)
 
 Reports
 -------
 
 Input Report
 ~~~~~~~~~~~~
-Length:     %(hid_caps.InputReportByteLength)d byte(s)
-Buttons:    %(hid_caps.NumberInputButtonCaps)d button(s)
-Values:     %(hid_caps.NumberInputValueCaps)d value(s)
+Length:     %(hid_caps.input_report_byte_length)d byte(s)
+Buttons:    %(hid_caps.number_input_button_caps)d button(s)
+Values:     %(hid_caps.number_input_value_caps)d value(s)
 
 Output Report
 ~~~~~~~~~~~~~
-Length:     %(hid_caps.OutputReportByteLength)d byte(s)
-Buttons:    %(hid_caps.NumberOutputButtonCaps)d button(s)
-Values:     %(hid_caps.NumberOutputValueCaps)d value(s)
+nength:     %(hid_caps.output_report_byte_length)d byte(s)
+Buttons:    %(hid_caps.number_output_button_caps)d button(s)
+Values:     %(hid_caps.number_output_value_caps)d value(s)
 
 Feature Report
 ~~~~~~~~~~~~~
-Length:     %(hid_caps.FeatureReportByteLength)d byte(s)
-Buttons:    %(hid_caps.NumberFeatureButtonCaps)d button(s)
-Values:     %(hid_caps.NumberFeatureValueCaps)d value(s)
+Length:     %(hid_caps.feature_report_byte_length)d byte(s)
+Buttons:    %(hid_caps.number_feature_button_caps)d button(s)
+Values:     %(hid_caps.number_feature_value_caps)d value(s)
 
 """ % CompundVarDict(dev_vars)) #better than vars()!
     #return

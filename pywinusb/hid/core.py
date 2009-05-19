@@ -1,4 +1,6 @@
-#
+#!/usr/bin/env python
+# -*- coding: Latin-1 -*-
+
 """
 This is the main module, the main interface classes and functions
 are available in the top level hid package
@@ -377,7 +379,7 @@ class HidDevice(HidDeviceBaseClass):
             0 )
         if hid_handle == INVALID_HANDLE_VALUE:
             raise HIDError("Error opening HID device: %s\n"%self.product_name)
-
+        
         self.__open_status = True
         self.hid_handle = hid_handle
         
@@ -388,7 +390,7 @@ class HidDevice(HidDeviceBaseClass):
             self.close()
             raise HIDError("Failure to get HID preparsed data")
         self.ptr_preparsed_data = ptr_preparsed_data
-
+        
         #get top level capabilities
         hid_caps = HIDP_CAPS()
         HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps)) )
@@ -448,6 +450,7 @@ class HidDevice(HidDeviceBaseClass):
                 if not self.report_set.has_key(report_kind):
                     self.report_set[report_kind] = set()
                 self.report_set[report_kind].add( usage_item.report_id )
+
         #now prepare the input report handler
         if hid_caps.input_report_byte_length:
             #first make templates for easy parsing input reports
@@ -458,6 +461,8 @@ class HidDevice(HidDeviceBaseClass):
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
                 self.max_input_queue_size, hid_caps.input_report_byte_length)
+            print 12345
+            return
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
             self.__reading_thread = HidDevice.InputReportReaderThread( \
@@ -487,9 +492,7 @@ class HidDevice(HidDeviceBaseClass):
             overlapped_write = over_write
             WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
                 None, byref(overlapped_write)) #none overlaped
-            #print "ww"
             result = WaitForSingleObject(overlapped_write.h_event, 10000 )
-            #print "wf"
             CloseHandle(overlapped_write.h_event)
             if result != WAIT_OBJECT_0: #success
                 return False #device has being disconnected
@@ -543,9 +546,7 @@ class HidDevice(HidDeviceBaseClass):
     def close(self):
         # free parsed data
         if not self.is_opened():
-            #print "Already closed: %d"%self.hid_handle
             return
-        #print "Closing: %d"%self.hid_handle
         self.__open_status = False
 
         #finish reading thread
@@ -666,11 +667,6 @@ class HidDevice(HidDeviceBaseClass):
                         #decison applies, call handlers
                         for function_handler in handlers:
                             function_handler(new_value, event_kind)
-        if my_debug:
-            print 'HID report:',
-            for item in raw_report:
-                print hex(item),
-            print '\n'
 
     def find_input_usage(self, full_usage_id):
         "Check if full usage Id included in input reports set"
@@ -849,7 +845,6 @@ class HidDevice(HidDeviceBaseClass):
             #
             hid_object = self.hid_object
             n = self.raw_report_size
-            #print "reader set: %d"%hid_object.hid_handle
             while not self.__abort:
                 #get storage
                 buf_report = hid_object._input_report_queue.get_new()
@@ -865,11 +860,9 @@ class HidDevice(HidDeviceBaseClass):
                     #wait for event
                     if self.__abort:
                         break
-                    #print "rw: %d"%hid_object.hid_handle
                     result = WaitForSingleObject( \
                         self.__overlapped_read_obj.h_event, 
                         INFINITE )
-                    #print "rf: %d"%hid_object.hid_handle
                     if result != WAIT_OBJECT_0: #success
                         break #device has being disconnected
                 else:
@@ -877,7 +870,6 @@ class HidDevice(HidDeviceBaseClass):
                     if error == 997: #overlapped operation in progress
                         time.sleep(0.05) #HACKME: This aint pretty!, 50ms
                         hid_object._input_report_queue.reuse(buf_report)
-                        #print 'rc'
                         continue
                     raise HIDError("Error %d when trying to read from HID "\
                         "device: %s"%(error, ctypes.FormatError(error)) )
@@ -888,11 +880,10 @@ class HidDevice(HidDeviceBaseClass):
             self.__overlapped_read_obj = None
             CloseHandle(over_read.h_event)
             hid_object.close()
-            #print "reader closed: %d"%hid_object.hid_handle
 
     def __repr__(self):
-        return "HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
-            "Path: %s" % (self.vendor_id, self.product_id, self.version_number,
+        return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
+            "Path: %s" % (self.vendor_id, self.product_id, self.version_number,\
             self.vendor_name, self.product_name, self.device_path)
 
 class ReportItem(object):
@@ -906,9 +897,7 @@ class ReportItem(object):
             caps_record.report_count > 1)
         self.__bit_size = 1
         self.__report_count = 1
-        if not usage_id:
-            assert(not caps_record.is_range), \
-                "usage_id should be supplied for range items"
+        if not caps_record.is_range:
             self.usage_id = caps_record.union.not_range.usage
         else:
             self.usage_id = usage_id
@@ -1224,7 +1213,6 @@ class HidReport(object):
                 len(item.value_array), self.__hid_object.ptr_preparsed_data, 
                 byref(raw_data), sizeof(raw_data)) )
             #
-            #print list(item.value_array)
             
     def __prepare_raw_data(self):
         "Format internal __raw_data storage according to usages setting"
@@ -1373,34 +1361,31 @@ class HidReport(object):
     #class HIDReport finishes ***********************
 
 def simple_test():
-    #simple test
+    # simple test
+    # first be kind with local encodings
+    import codecs, sys
+    sys.stdout = codecs.getwriter('mbcs')(sys.stdout)
+    # then the big cheese...
     from tools import write_documentation
     all_hids = find_all_hid_devices()
     if all_hids:
         print "Found HID class devices!, full details..."
         for dev in all_hids:
-            print dev, '\tPath:', dev.device_path, \
-                '\n\tInstance:', dev.instance_id, \
-                '\n\t\Port (ID):', dev.get_parent_instance_id(), \
-                '\n\tPort (str)', dev.get_parent_device()
+            device_name = unicode(dev)
+            print device_name,'\n'
+            print '\n  Path:      ', dev.device_path
+            print '\n  Instance:  ', dev.instance_id 
+            print '\n  Port (ID): ', dev.get_parent_instance_id()
+            print '\n  Port (str):', unicode(dev.get_parent_device())
             #
             print "Checking caps..."
             print "-----------------"
             #
-            for dev in HidDeviceFilter().get_devices():
-                print '*', dev
-                try:
-                    dev.open()
-                    reading_only = False
-                    if not reading_only:
-                        write_documentation(dev, sys.stdout)
-                    else:
-                        print "Waiting for data..."
-                        while dev.is_opened():
-                            pass
-                        break
-                finally:
-                    dev.close()
+            try:
+                dev.open()
+                write_documentation(dev, sys.stdout)
+            finally:
+                dev.close()
     else:
         print "There's not any non system HID class device available"
 #

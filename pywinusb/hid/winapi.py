@@ -126,7 +126,7 @@ class HIDP_BUTTON_CAPS(Structure):
                 ("usage_min", c_ushort),     ("usage_max", c_ushort),
                 ("string_min", c_ushort),    ("string_max", c_ushort),
                 ("designator_min", c_ushort),("designator_max", c_ushort),
-                ("data_index_min", c_ushort), ("data_indexMax", c_ushort)
+                ("data_index_min", c_ushort), ("data_index_max", c_ushort)
             ]
 
         class NOT_RANGE(Structure):
@@ -157,10 +157,10 @@ class HIDP_BUTTON_CAPS(Structure):
         ("union", RANGE_NOT_RANGE)
     ]
     def InspectStruct(self):
-        if self.IsRange:
-            return InspectStruct(self)+InspectStruct(self.union.Range)
+        if self.is_range:
+            return InspectStruct(self)+InspectStruct(self.union.range)
         else:
-            return InspectStruct(self)+InspectStruct(self.union.NotRange)
+            return InspectStruct(self)+InspectStruct(self.union.not_range)
             
 class HIDP_VALUE_CAPS(Structure):
     class RANGE_NOT_RANGE(Union):
@@ -169,7 +169,7 @@ class HIDP_VALUE_CAPS(Structure):
                 ("usage_min", c_ushort),     ("usage_max", c_ushort),
                 ("string_min", c_ushort),    ("string_max", c_ushort),
                 ("designator_min", c_ushort),("designator_max", c_ushort),
-                ("data_index_min", c_ushort), ("data_indexMax", c_ushort)
+                ("data_index_min", c_ushort), ("data_index_max", c_ushort)
             ]
 
         class NOT_RANGE(Structure):
@@ -210,10 +210,10 @@ class HIDP_VALUE_CAPS(Structure):
         ("union", RANGE_NOT_RANGE)
     ]
     def InspectStruct(self):
-        if self.IsRange:
-            return InspectStruct(self)+InspectStruct(self.union.Range)
+        if self.is_range:
+            return InspectStruct(self)+InspectStruct(self.union.range)
         else:
-            return InspectStruct(self)+InspectStruct(self.union.NotRange)
+            return InspectStruct(self)+InspectStruct(self.union.not_range)
 
 class HIDP_DATA(Structure):
     class HIDP_DATA_VALUE(Union):
