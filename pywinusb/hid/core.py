@@ -461,7 +461,6 @@ class HidDevice(HidDeviceBaseClass):
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
                 self.max_input_queue_size, hid_caps.input_report_byte_length)
-            print 12345
             return
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
@@ -1139,7 +1138,7 @@ class HidReport(object):
             result[key] = usage.value
         return result
 
-    def __alloc_raw_data(self, initial_values):
+    def __alloc_raw_data(self, initial_values=None):
         #allocate c_byte storage
         if self.__raw_data == None: #first time only, create storage
             raw_data_type = c_byte * self.__raw_report_size

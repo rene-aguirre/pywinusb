@@ -17,7 +17,7 @@ def test_telephony_hook():
     # get all currently connected HID devices we could filter by doing 
     # something like hid.HidDeviceFilter(VendorId=0x1234), product Id 
     # filters (with masks) and other capabilities also available
-    all_devices = hid.HidDeviceFilter().get_devices() #plantronics
+    all_devices = hid.HidDeviceFilter().get_devices() 
 
     if not all_devices:
         print "No HID class devices attached."
