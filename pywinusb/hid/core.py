@@ -301,7 +301,13 @@ class HidDevice(HidDeviceBaseClass):
         
         # HID device handle first
         h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
+        h_hid = INVALID_HANDLE_VALUE
+        try:
+            h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
                 FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0)
+        except:
+            pass
+        
         if h_hid == INVALID_HANDLE_VALUE:
             return
 
@@ -461,6 +467,7 @@ class HidDevice(HidDeviceBaseClass):
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
                 self.max_input_queue_size, hid_caps.input_report_byte_length)
+            print 12345
             return
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
@@ -640,10 +647,11 @@ class HidDevice(HidDeviceBaseClass):
         if not self.__evt_handlers or not self.is_opened():
             return
 
-        if not raw_report[0] and \
-                not hid_device_path_exists(self.device_path):
-            #windows XP sends empty report when disconnecting
-            self.close() #device disconnected
+        if not raw_report[0] or \
+                (raw_report[0] not in self.__input_report_templates):
+            if not hid_device_path_exists(self.device_path):
+                #windows XP sends empty report when disconnecting
+                self.close() #device disconnected
             return
         #used pre-parsed report templates
         #by report id
@@ -1108,6 +1116,11 @@ class HidReport(object):
             key = key.key()
         return self.__items[key]
 
+    def __setitem__(self, key, value):
+        """set report item value"""
+        item = self.__getitem__(key)
+        item.value = value
+        
     def __contains__(self, key):
         if isinstance(key, ReportItem):
             key = key.key()
