@@ -300,7 +300,6 @@ class HidDevice(HidDeviceBaseClass):
         HidDeviceBaseClass.__init__(self)
         
         # HID device handle first
-        h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
         h_hid = INVALID_HANDLE_VALUE
         try:
             h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
@@ -467,8 +466,6 @@ class HidDevice(HidDeviceBaseClass):
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
                 self.max_input_queue_size, hid_caps.input_report_byte_length)
-            print 12345
-            return
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
             self.__reading_thread = HidDevice.InputReportReaderThread( \
