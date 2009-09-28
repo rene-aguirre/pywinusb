@@ -1344,9 +1344,9 @@ class HidReport(object):
         #reference proper object
         raw_data = self.__raw_data
         if self.__report_kind == HidP_Output:
-            self.__hid_object.send_output_report(raw_data)
+            return self.__hid_object.send_output_report(raw_data)
         elif self.__report_kind == HidP_Feature:
-            self.__hid_object.send_feature_report(raw_data)
+            return self.__hid_object.send_feature_report(raw_data)
         else:
             pass #can't get here (yet)
 
