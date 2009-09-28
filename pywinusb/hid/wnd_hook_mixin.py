@@ -9,15 +9,10 @@
 import ctypes
 from ctypes import c_long, c_int
 
-import wx
 
 ## It's probably not neccesary to make this distinction, but it never hurts to be safe
-if 'unicode' not in wx.PlatformInfo:
-    SetWindowLong = ctypes.windll.user32.SetWindowLongW
-    CallWindowProc = ctypes.windll.user32.CallWindowProcW
-else:
-    SetWindowLong = ctypes.windll.user32.SetWindowLongA
-    CallWindowProc = ctypes.windll.user32.CallWindowProcA
+SetWindowLong = ctypes.windll.user32.SetWindowLongW
+CallWindowProc = ctypes.windll.user32.CallWindowProcW
     
 GWL_WNDPROC = -4
 WM_DESTROY  = 2
@@ -28,7 +23,7 @@ WndProcType = ctypes.WINFUNCTYPE(c_int, c_long, c_int, c_int, c_int)
 
 class WndProcHookMixin:
     """
-    This class can be mixed in with any wxWindows window class in order to hook it's WndProc function. 
+    This class can be mixed in with any window class in order to hook it's WndProc function. 
     You supply a set of message handler functions with the function add_msg_handler. When the window receives that
     message, the specified handler function is invoked. If the handler explicitly returns False then the standard 
     WindowProc will not be invoked with the message. You can really screw things up this way, so be careful. 
@@ -36,19 +31,21 @@ class WndProcHookMixin:
     use the standard wxWindows method of binding events for that. This is really for capturing custom windows messages
     or windows messages that are outside of the wxWindows world.
     """
-    def __init__(self):
+    def __init__(self, wnd_handle):
         self.__msg_dict = {}
         ## We need to maintain a reference to the WndProcType wrapper
         ## because ctypes doesn't
         self.__local_wnd_proc_wrapped = None 
+        # keep window handle
+        self.__local_win_handle = wnd_handle
         
     def hook_wnd_proc(self):
         self.__local_wnd_proc_wrapped = WndProcType(self.local_wnd_proc)
-        self.__old_wnd_proc = SetWindowLong(self.GetHandle(),
+        self.__old_wnd_proc = SetWindowLong(self.__local_win_handle,
                                         GWL_WNDPROC,
                                         self.__local_wnd_proc_wrapped)
     def unhook_wnd_proc(self):
-        SetWindowLong(self.GetHandle(),
+        SetWindowLong(self.__local_win_handle,
                         GWL_WNDPROC,
                         self.__old_wnd_proc)
         
@@ -80,12 +77,12 @@ class WndProcHookMixin:
                                 
 # a simple example
 if __name__ == "__main__":
-    
+    import wx
     class MyFrame(wx.Frame,WndProcHookMixin):
         def __init__(self,parent):
-            WndProcHookMixin.__init__(self)
             frame_size = wx.Size(640,480)
             wx.Frame.__init__(self,parent,-1,"Change my size and watch stdout",size=frame_size)
+            WndProcHookMixin.__init__(self, self.GetHandle())
             # this is for demo purposes only, use the wxPython method for getting events 
             # on window size changes and other standard windowing messages
             WM_SIZE = 5

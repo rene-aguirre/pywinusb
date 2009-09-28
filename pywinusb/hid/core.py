@@ -670,8 +670,12 @@ class HidDevice(HidDeviceBaseClass):
                     if event_applies[event_kind](old_values[key], new_value):
                         #decison applies, call handlers
                         for function_handler in handlers:
-                            function_handler(new_value, event_kind)
-
+                            #check if the application wants some particular parameter
+                            if handlers[function_handler]:
+                                function_handler(new_value, event_kind, handlers[function_handler])
+                            else:
+                                function_handler(new_value, event_kind)
+    
     def find_input_usage(self, full_usage_id):
         "Check if full usage Id included in input reports set"
         for report_id, report_obj in self.__input_report_templates.items():
@@ -680,17 +684,17 @@ class HidDevice(HidDeviceBaseClass):
         return 0
 
     def add_event_handler(self, full_usage_id, handler_function, 
-            event_kind = HID_EVT_ALL):
+            event_kind = HID_EVT_ALL, aux_data = None):
         "Add event handler for usage value/button changes"
         if not self.find_input_usage(full_usage_id):
             #do not add handler
             return
         #get dict for full usages
         top_map_handler = self.__evt_handlers.get(full_usage_id, dict())
-        event_handler_set = top_map_handler.get(event_kind, set())
+        event_handler_set = top_map_handler.get(event_kind, dict())
         if handler_function not in event_handler_set:
             #add a new handler
-            event_handler_set.add(handler_function)
+            event_handler_set[handler_function] = aux_data
         if event_kind not in top_map_handler:
             top_map_handler[event_kind] = event_handler_set
         if full_usage_id not in self.__evt_handlers:

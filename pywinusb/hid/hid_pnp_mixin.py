@@ -1,15 +1,9 @@
 #helpers
 import ctypes
 from ctypes.wintypes import DWORD, WORD, BYTE
-from WndProcHookMixin import WndProcHookMixin
+from wnd_hook_mixin import WndProcHookMixin
 from core import HIDError, GetHidGuid
-
-#structures for ctypes
-class GUID(ctypes.Structure):
-    _fields_ = [("Data1", DWORD),
-                ("Data2", WORD),
-                ("Data3", WORD),
-                ("Data4", BYTE * 8)]
+from winapi import GUID
 
 #for PNP notifications
 class DEV_BROADCAST_DEVICEINTERFACE(ctypes.Structure):
@@ -50,24 +44,27 @@ DBT_DEVTYP_HANDLE           = 0x00000006
 DEVICE_NOTIFY_WINDOW_HANDLE     = 0x00000000
 DEVICE_NOTIFY_SERVICE_HANDLE    = 0x00000001
 
-class UsbPnpWindowMixin(WndProcHookMixin):
-    def __init__(self, hid_device_filter):
-        WndProcHookMixin.__init__(self)
-        self._h_notify = self.RegisterHidNotification()
-        if self._h_notify:
-            self.add_msg_handler(WM_DEVICECHANGE, self._OnHookedPnP)
-            self.hook_wnd_proc()
-        else:
-            raise HIDError("PnP notification setup failed!")
-        self.hid_filter = hid_device_filter
+class HidPnPWindowMixin(WndProcHookMixin):
+    def __init__(self, wnd_handle):
+        WndProcHookMixin.__init__(self, wnd_handle)
+        self.__hid_hwnd = wnd_handle
         self.current_status = "unknown"
-            
+        #register hid notification msg handler
+        self.__h_notify = self._register_hid_notification()
+        if not self.__h_notify:
+            raise HIDError("PnP notification setup failed!")
+        else:
+            self.add_msg_handler(WM_DEVICECHANGE, self._on_hid_pnp)
+            # add capability to filter out windows messages
+            self.hook_wnd_proc()
+    
     def unhook_wnd_proc(self):
+        "This function must be called to clean up system resources"
         WndProcHookMixin.unhook_wnd_proc(self)
-        if self._h_notify:
-            self.UnRegisterHidNotification() #ignore result
-            
-    def _OnHookedPnP(self, w_param, l_param):
+        if self.__h_notify:
+            self._unregister_hid_notification() #ignore result
+
+    def _on_hid_pnp(self, w_param, l_param):
         "Process WM_DEVICECHANGE system messages"
         new_status = "unknown"
         if w_param == DBT_DEVICEARRIVAL:
@@ -78,8 +75,7 @@ class UsbPnpWindowMixin(WndProcHookMixin):
                 #confirm if the right message received
                 if notify_obj and notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                     #only connect if already disconnected
-                    if self.hid_filter.get_devices():
-                        new_status = "connected"
+                    new_status = "connected"
         elif w_param == DBT_DEVICEREMOVECOMPLETE:
             # hid device removed
             notify_obj = None
@@ -88,20 +84,18 @@ class UsbPnpWindowMixin(WndProcHookMixin):
                 #
                 if notify_obj and notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                     #only connect if already disconnected
-                    if not self.hid_filter.get_devices():
-                        new_status = "disconnected"
+                    new_status = "disconnected"
                     
         #verify if need to call event handler
         if new_status != "unknown" and new_status != self.current_status:
             self.current_status = new_status
-            self.OnUsbPnPEvent(self.current_status)
+            self.on_hid_pnp(self.current_status)
         #
         return True
         
-    def RegisterHidNotification(self):
+    def _register_hid_notification(self):
         """Register HID notification events on any window (passed by window handler),
         returns a notification handler"""
-        
         #create structure
         notify_obj = DEV_BROADCAST_DEVICEINTERFACE()
         #fill up
@@ -109,19 +103,32 @@ class UsbPnpWindowMixin(WndProcHookMixin):
         notify_obj.dbcc_size = ctypes.sizeof(notify_obj)
         notify_obj.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE
         notify_obj.dbcc_classguid = GetHidGuid()
-        h_notify = RegisterDeviceNotification(self.GetHandle(), ctypes.byref(notify_obj), DEVICE_NOTIFY_WINDOW_HANDLE)
+        h_notify = RegisterDeviceNotification(self.__hid_hwnd, ctypes.byref(notify_obj), DEVICE_NOTIFY_WINDOW_HANDLE)
         #
         return int(h_notify)
 
-    def UnRegisterHidNotification(self):
+    def _unregister_hid_notification(self):
         "Remove PnP notification handler"
-        if int(self._h_notify) == 0:
+        if int(self.__h_notify) == 0:
             return #invalid
-
-        result = UnregisterDeviceNotification(self._h_notify)
-        self._h_notify = None
+        result = UnregisterDeviceNotification(self.__h_notify)
+        self.__h_notify = None
         return int(result)
         
-    def OnUsbPnPEvent(self):
-        "'Virtual' function to refresh update for connection status"
-        pass
+    def on_hid_pnp(self, new_status):
+        "'Virtual' like function to refresh update for connection status"
+        print "HID:", new_status
+
+# a simple example
+if __name__ == "__main__":
+    import wx
+    class MyFrame(wx.Frame,HidPnPWindowMixin):
+        def __init__(self,parent):
+            frame_size = wx.Size(640,480)
+            wx.Frame.__init__(self,parent,-1,"Change my size and watch stdout",size=frame_size)
+            HidPnPWindowMixin.__init__(self, self.GetHandle())
+        
+    app = wx.App(False)
+    frame = MyFrame(None)
+    frame.Show()
+    app.MainLoop()
