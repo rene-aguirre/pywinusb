@@ -1,6 +1,6 @@
 #
 import ctypes
-from ctypes import Structure, Union, c_byte, c_char, c_long, c_ulong, c_ushort, c_wchar
+from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort, c_wchar
 from ctypes import byref, POINTER
 from ctypes.wintypes import c_char, ULONG, BOOLEAN, BYTE, WORD, DWORD
 #from core import HIDError
@@ -143,7 +143,7 @@ class HIDP_BUTTON_CAPS(Structure):
 
     _fields_ = [
         ("usage_page", c_ushort),
-        ("report_id", c_byte),
+        ("report_id", c_ubyte),
         ("is_alias", BOOLEAN),
         ("bit_field", c_ushort),
         ("link_collection", c_ushort),
@@ -186,7 +186,7 @@ class HIDP_VALUE_CAPS(Structure):
         
     _fields_ = [
         ("usage_page", c_ushort),
-        ("report_id", c_byte),
+        ("report_id", c_ubyte),
         ("is_alias", BOOLEAN),
         ("bit_field", c_ushort),
         ("link_collection", c_ushort),
@@ -197,7 +197,7 @@ class HIDP_VALUE_CAPS(Structure):
         ("is_designator_range", BOOLEAN),
         ("is_absolute", BOOLEAN),
         ("has_null", BOOLEAN),
-        ("reserved", c_byte),
+        ("reserved", c_ubyte),
         ("bit_size", c_ushort),
         ("report_count", c_ushort),
         ("reserved2", c_ushort * 5),

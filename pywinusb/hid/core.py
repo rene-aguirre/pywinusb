@@ -11,7 +11,7 @@ import _winreg
 import threading
 import time
 
-from ctypes import c_byte, c_ulong, c_ushort, c_wchar, byref, sizeof
+from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof
 
 #local modules
 from winapi import *
@@ -474,14 +474,14 @@ class HidDevice(HidDeviceBaseClass):
 
     def send_output_report(self, data):
         """Send input/output/feature report ID = report_id, data should be a 
-        c_byte object with included the required report data
+        c_ubyte object with included the required report data
         """
         assert( self.is_opened() )
 
-        #make sure we have c_byte array storage
+        #make sure we have c_ubyte array storage
         if not ( isinstance(data, ctypes.Array) and \
-                issubclass(data._type_, c_byte) ):
-            raw_data_type = c_byte * len(data)
+                issubclass(data._type_, c_ubyte) ):
+            raw_data_type = c_ubyte * len(data)
             raw_data = raw_data_type()
             for index in range( len(data) ):
                 raw_data[index] = data[index]
@@ -509,10 +509,10 @@ class HidDevice(HidDeviceBaseClass):
         """Send input/output/feature report ID = report_id, data should be a 
         c_byte object with included the required report data
         """
-        #make sure we have c_byte array storage
+        #make sure we have c_ubyte array storage
         if not ( isinstance(data, ctypes.Array) and issubclass(data._type_, 
-                c_byte) ):
-            raw_data_type = c_byte * len(data)
+                c_ubyte) ):
+            raw_data_type = c_ubyte * len(data)
             raw_data = raw_data_type()
             for index in range( len(data) ):
                 raw_data[index] = data[index]
@@ -704,7 +704,7 @@ class HidDevice(HidDeviceBaseClass):
         def __init__(self, max_size, report_size):
             self.__locked_down = False
             self.max_size = max_size
-            self.repport_buffer_type = c_byte * report_size
+            self.repport_buffer_type = c_ubyte * report_size
             self.used_queue = []
             self.fresh_queue = []
             self.used_lock = threading.Lock()
@@ -909,7 +909,7 @@ class ReportItem(object):
             self.usage_id = caps_record.union.not_range.usage
         else:
             self.usage_id = usage_id
-        self.__report_id = c_byte(caps_record.report_id)
+        self.__report_id = c_ubyte(caps_record.report_id)
         self.page_id = caps_record.usage_page
         self.__value = 0
         if caps_record.is_range:
@@ -932,7 +932,7 @@ class ReportItem(object):
                 if (caps_record.bit_size * caps_record.report_count) % 8: 
                     #remainder
                     byte_size += 1
-                value_type = c_byte * byte_size
+                value_type = c_ubyte * byte_size
                 self.__value = value_type()
             self.__bit_size = caps_record.bit_size
             self.__report_count = caps_record.report_count
@@ -977,7 +977,7 @@ class ReportItem(object):
 
     def get_value(self):
         if self.__is_value_array:
-            if self.__bit_size == 8: #matching c_byte
+            if self.__bit_size == 8: #matching c_ubyte
                 return list(self.__value)
             else:
                 result = []
@@ -1065,7 +1065,7 @@ class HidReport(object):
         self.__report_kind = report_type  #target report type
         self.__value_array_items = list() #array of usages items
         self.__hid_object = hid_object      #parent hid object
-        self.__report_id = c_byte(report_id)  #target report Id
+        self.__report_id = c_ubyte(report_id)  #target report Id
         self.__items = dict()       #access items by 'full usage' key
         self.__idx_items = dict()  #access internal items by HID dll usage idx
         self.__raw_data = None       #buffer storage (if needed)
@@ -1153,9 +1153,9 @@ class HidReport(object):
         return result
 
     def __alloc_raw_data(self, initial_values=None):
-        #allocate c_byte storage
+        #allocate c_ubyte storage
         if self.__raw_data == None: #first time only, create storage
-            raw_data_type = c_byte * self.__raw_report_size
+            raw_data_type = c_ubyte * self.__raw_report_size
             self.__raw_data = raw_data_type()
         else:
             #initialize
@@ -1167,7 +1167,7 @@ class HidReport(object):
     def set_raw_data(self, raw_data):
         """Set usage values based on given raw data, item[0] is report_id, 
         lenght should match 'raw_data_length' value, best performance if 
-        raw_data is c_byte ctypes array object type
+        raw_data is c_ubyte ctypes array object type
         """
         #pre-parsed data should exist
         if not self.__hid_object.ptr_preparsed_data:
@@ -1222,7 +1222,7 @@ class HidReport(object):
                 item.page_id,
                 0, #link collection
                 item.usage_id, #short usage
-                byref(item.value_array), #output data (c_byte storage)
+                byref(item.value_array), #output data (c_ubyte storage)
                 len(item.value_array), self.__hid_object.ptr_preparsed_data, 
                 byref(raw_data), sizeof(raw_data)) )
             #
@@ -1244,6 +1244,7 @@ class HidReport(object):
             #
         except HIDError:
             self.__raw_data[0] = self.__report_id
+
         #check if we have pre-allocated usage storage
         if not self.__usage_data_list: # create HIDP_DATA buffer
             max_items = hid_dll.HidP_MaxDataListLength(self.__report_kind, 
@@ -1252,6 +1253,7 @@ class HidReport(object):
                 raise HIDError("Internal error while requesing usage length")
             data_list_type = HIDP_DATA * max_items
             self.__usage_data_list = data_list_type()
+
         #reference HIDP_DATA bufer
         data_list = self.__usage_data_list
         #set buttons and values usages first
@@ -1303,7 +1305,7 @@ class HidReport(object):
 
     def get_raw_data(self):
         """Get raw HID report based on internal report item settings, 
-        creates new c_bytes storage
+        creates new c_ubytes storage
         """
         if self.__report_kind != HidP_Output \
                 and self.__report_kind != HidP_Feature:
@@ -1323,8 +1325,9 @@ class HidReport(object):
         if raw_data and (len(raw_data) != self.__raw_report_size):
             raise HIDError("Report size has to be %d elements (bytes)" \
                 % self.__raw_report_size)
-        #shold be valid report id
-        if raw_data and raw_data[0] != self.__report_id:
+        #should be valid report id
+        if raw_data and raw_data[0] != self.__report_id.value:
+            #hint, raw_data should be a plain list of integer values
             raise HIDError("Not matching report id")
         #
         if self.__report_kind != HidP_Output and \
@@ -1335,7 +1338,7 @@ class HidReport(object):
             # we'll construct the raw report
             self.__prepare_raw_data()
         elif not ( isinstance(raw_data, ctypes.Array) and \
-                issubclass(raw_data._type_, c_byte) ):
+                issubclass(raw_data._type_, c_ubyte) ):
             # pre-memory allocation for performance
             self.__alloc_raw_data(raw_data)
         #reference proper object
