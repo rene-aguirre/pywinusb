@@ -1012,7 +1012,7 @@ class ReportItem(object):
             usage_string_type = c_wchar * MAX_HID_STRING_LENGTH 
             # 128 max string length
             abuffer = usage_string_type()
-            hid_dll.HidD_GetIndexedString(self.hid_report.get_hid_object(), 
+            hid_dll.HidD_GetIndexedString(self.hid_report.get_hid_object().hid_handle, 
                 self.string_index,
                 byref(abuffer), MAX_HID_STRING_LENGTH-1 )
             return abuffer.value
