@@ -878,7 +878,9 @@ class HidDevice(HidDeviceBaseClass):
                         break #device has being disconnected
                 else:
                     error = ctypes.GetLastError()
-                    if error == 997: #overlapped operation in progress
+                    if not error:
+                        raise HidError("Unexpected ReadFile result: %d" % result)
+                    elif error == 997: #overlapped operation in progress
                         time.sleep(0.05) #HACKME: This aint pretty!, 50ms
                         hid_object._input_report_queue.reuse(buf_report)
                         continue
