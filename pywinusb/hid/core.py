@@ -364,7 +364,7 @@ class HidDevice(HidDeviceBaseClass):
             return False
         return True
 
-    def open(self):
+    def open(self, output_only = False):
         """Open HID device and obtain 'Collection Information'.
         It effectevely prepares the HidDevice object for reading and writing
         """
@@ -457,7 +457,7 @@ class HidDevice(HidDeviceBaseClass):
                 self.report_set[report_kind].add( usage_item.report_id )
 
         #now prepare the input report handler
-        if hid_caps.input_report_byte_length:
+        if not output_only and hid_caps.input_report_byte_length:
             #first make templates for easy parsing input reports
             self.__input_report_templates = dict()
             for report_id in self.report_set[HidP_Input]:
