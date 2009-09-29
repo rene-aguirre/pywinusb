@@ -644,8 +644,10 @@ class HidDevice(HidDeviceBaseClass):
         if not self.__evt_handlers or not self.is_opened():
             return
 
-        if not raw_report[0] or \
+        if not raw_report[0]  and \
                 (raw_report[0] not in self.__input_report_templates):
+            # windows sends an empty array when disconnecting
+            # but, this might have a collition with report_id = 0
             if not hid_device_path_exists(self.device_path):
                 #windows XP sends empty report when disconnecting
                 self.close() #device disconnected
@@ -681,14 +683,14 @@ class HidDevice(HidDeviceBaseClass):
         for report_id, report_obj in self.__input_report_templates.items():
             if full_usage_id in report_obj:
                 return report_id
-        return 0
+        return None #report_id might be 0
 
     def add_event_handler(self, full_usage_id, handler_function, 
             event_kind = HID_EVT_ALL, aux_data = None):
         "Add event handler for usage value/button changes"
-        if not self.find_input_usage(full_usage_id):
+        if self.find_input_usage(full_usage_id) == None:
             #do not add handler
-            return
+            return False
         #get dict for full usages
         top_map_handler = self.__evt_handlers.get(full_usage_id, dict())
         event_handler_set = top_map_handler.get(event_kind, dict())
@@ -699,6 +701,7 @@ class HidDevice(HidDeviceBaseClass):
             top_map_handler[event_kind] = event_handler_set
         if full_usage_id not in self.__evt_handlers:
             self.__evt_handlers[full_usage_id] = top_map_handler
+        return True
 
     class InputReportQueue(object):
         def __init__(self, max_size, report_size):
