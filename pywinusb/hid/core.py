@@ -17,6 +17,10 @@ from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof
 from winapi import *
 from helpers import HIDError, synchronized, ReadOnlyList
 
+if not hasattr(threading.Thread, "is_alive"):
+    # in python <2.6 is_alive was called isAlive
+    threading.Thread.is_alive = threading.Thread.isAlive
+
 USAGE = c_ushort
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
