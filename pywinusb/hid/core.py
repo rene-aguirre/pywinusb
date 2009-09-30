@@ -644,7 +644,6 @@ class HidDevice(HidDeviceBaseClass):
     @synchronized(HidDeviceBaseClass._raw_reports_lock)
     def _process_raw_report(self, raw_report):
         "Default raw input report data handler"
-        my_debug = False
         if not self.__evt_handlers or not self.is_opened():
             return
 
@@ -656,16 +655,15 @@ class HidDevice(HidDeviceBaseClass):
                 #windows XP sends empty report when disconnecting
                 self.close() #device disconnected
             return
-        #used pre-parsed report templates
-        #by report id
+        # using pre-parsed report templates, by report id
         report_template = self.__input_report_templates[raw_report[0]] 
-        #old condition
+        # old condition
         old_values = report_template.get_usages()
-        #parset incomming data
+        # parset incomming data
         report_template.set_raw_data(raw_report)
-        #get new data
+        # get new data
         new_values = report_template.get_usages()
-        #now diff
+        # now diff
         event_applies = self.evt_decision
         for key in new_values:
             if key in self.__evt_handlers:
@@ -871,10 +869,18 @@ class HidDevice(HidDeviceBaseClass):
                 result = ReadFile(int(hid_object.hid_handle), 
                     byref(buf_report), int(n), byref(bytes_read), 
                     byref(self.__overlapped_read_obj) )
-                if result == 1:
-                    # data available!
-                    pass
-                elif result == 0 or result == ERROR_IO_PENDING:
+                if not result:
+                    error = ctypes.GetLastError()
+                    if error == ERROR_IO_PENDING: #overlapped operation in progress
+                        result = error
+                    elif error == 1167:
+                        # device disconnected
+                        break
+                    else:
+                        raise HIDError("Error %d when trying to read from HID "\
+                            "device: %s"%(error, ctypes.FormatError(error)) )
+                        break
+                if result == ERROR_IO_PENDING:
                     #wait for event
                     if self.__abort:
                         break
@@ -884,15 +890,8 @@ class HidDevice(HidDeviceBaseClass):
                     if result != WAIT_OBJECT_0: #success
                         break #device has being disconnected
                 else:
-                    error = ctypes.GetLastError()
-                    if not error:
-                        raise HIDError("Unexpected ReadFile result: %d" % result)
-                    elif error == 997: #overlapped operation in progress
-                        time.sleep(0.05) #HACKME: This aint pretty!, 50ms
-                        hid_object._input_report_queue.reuse(buf_report)
-                        continue
-                    raise HIDError("Error %d when trying to read from HID "\
-                        "device: %s"%(error, ctypes.FormatError(error)) )
+                    # it just succeeded (or seemed so)
+                    pass
                 # signal raw data already read
                 hid_object._input_report_queue.post( buf_report )
             #clen up
