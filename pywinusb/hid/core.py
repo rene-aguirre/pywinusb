@@ -871,7 +871,10 @@ class HidDevice(HidDeviceBaseClass):
                 result = ReadFile(int(hid_object.hid_handle), 
                     byref(buf_report), int(n), byref(bytes_read), 
                     byref(self.__overlapped_read_obj) )
-                if result == NO_ERROR or result == ERROR_IO_PENDING:
+                if result == 1:
+                    # data available!
+                    pass
+                elif result == 0 or result == ERROR_IO_PENDING:
                     #wait for event
                     if self.__abort:
                         break
