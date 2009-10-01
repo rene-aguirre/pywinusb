@@ -16,6 +16,7 @@ kernel32            = ctypes.windll.kernel32
 
 #os independent functions
 ReadFile            = kernel32.ReadFile
+CancelIo            = kernel32.CancelIo
 WriteFile           = kernel32.WriteFile
 CloseHandle         = kernel32.CloseHandle
 SetEvent            = kernel32.SetEvent
@@ -40,10 +41,9 @@ else:
     CreateFile          = kernel32.CreateFileW
     CreateEvent         = kernel32.CreateEventW
 
-
 b_verbose = True
 usb_verbose = False
-    
+
 #structures for ctypes
 class GUID(Structure):
     _fields_ = [("data1", DWORD),

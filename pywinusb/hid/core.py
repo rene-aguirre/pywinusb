@@ -816,7 +816,6 @@ class HidDevice(HidDeviceBaseClass):
             self.__abort = True
 
         def run(self):
-            print "%d thread started" % threading.currentThread()
             hid_object = self.hid_object
             while hid_object.is_opened() and not self.__abort:
                 raw_report = hid_object._input_report_queue.get()
@@ -843,9 +842,8 @@ class HidDevice(HidDeviceBaseClass):
             if self.is_alive() and self.__overlapped_read_obj:
                 # force overlapped events completition
                 SetEvent(self.__overlapped_read_obj.h_event)
-        
+
         def run(self):
-            print "%d thread started" % threading.currentThread()
             if not self.raw_report_size:
                 # don't raise any error as the hid object can still be used 
                 # for writing reports
@@ -900,13 +898,13 @@ class HidDevice(HidDeviceBaseClass):
                 # signal raw data already read
                 hid_object._input_report_queue.post( buf_report )
             #clen up
+            CancelIo( int(hid_object.hid_handle) )
             over_read = self.__overlapped_read_obj
             self.__overlapped_read_obj = None
             CloseHandle(over_read.h_event)
             self.__overlapped_read_obj = None
             del over_read
             hid_object.close()
-            print "%d thread finished" % threading.currentThread()
 
     def __repr__(self):
         return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
