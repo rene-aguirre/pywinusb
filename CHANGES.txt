@@ -1,0 +1,7 @@
+0.2.1,
+ * Bringing a little bit of stability
+ * Output only mode (no reading thread configured)
+ * Kind of usable now
+
+0.1.0, 
+ * First public release
