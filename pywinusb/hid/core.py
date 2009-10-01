@@ -6,6 +6,7 @@ This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
 import sys
+import gc
 import ctypes
 import _winreg
 import threading
@@ -542,7 +543,10 @@ class HidDevice(HidDeviceBaseClass):
         #other
         self.__reading_thread = None
         self.__input_processing_thread = None
-        self._input_report_queue = None
+        self._input_roport_queue = None
+        
+        #
+        gc.collect()
         
     def is_plugged(self):
         return self.device_path and hid_device_path_exists(self.device_path)
@@ -556,22 +560,25 @@ class HidDevice(HidDeviceBaseClass):
             return
         self.__open_status = False
 
-        #finish reading thread
+        # abort all running threads first
         if self.__reading_thread and self.__reading_thread.is_alive():
             self.__reading_thread.abort()
-        
-        #avoid posting new reports
-        if self._input_report_queue:
-            self._input_report_queue.release_events() #allow thead deadlocks
-            
-        #input report processor
         if self.__input_processing_thread and \
                 self.__input_processing_thread.is_alive():
             self.__input_processing_thread.abort()
-            
+        
+        #avoid posting new reports
+        if self._input_report_queue:
+            self._input_report_queue.release_events() #avoid thead deadlocks
+                        
         #properly close api handlers and pointers
         if self.ptr_preparsed_data:
             hid_dll.HidD_FreePreparsedData(self.ptr_preparsed_data)
+
+        # wait for the reading thread to complete before closing the device handle
+        while self.__reading_thread.is_alive():
+            time.sleep(0.050) # 50 ms latency, just to avoid cpu consumption
+
         if self.hid_handle:
             CloseHandle(self.hid_handle)
             
@@ -743,15 +750,17 @@ class HidDevice(HidDeviceBaseClass):
         #@logging_decorator
         def post(self, raw_report):
             if self.__locked_down:
+                self.fresh_changed_event.set()
                 return
             while True:
                 self.fresh_lock.acquire()
                 if len(self.fresh_queue) >= self.max_size:
+                    # instead of waiting for consumption, trash oldest
+                    item = self.fresh_queue.pop(0)
+                    self.reuse(item)
                     self.fresh_lock.release()
-                    self.fresh_changed_event.wait()
                     if self.__locked_down:
                         return
-                    self.fresh_changed_event.clear()
                     continue
                 break
             self.fresh_queue.append( raw_report )
@@ -761,6 +770,9 @@ class HidDevice(HidDeviceBaseClass):
         def reuse(self, raw_report):
             "Reuse not posted report"
             if self.__locked_down:
+                self.fresh_changed_event.set()
+                return
+            if not raw_report:
                 return
             self.used_lock.acquire()
             #we can reuse this item
@@ -770,11 +782,13 @@ class HidDevice(HidDeviceBaseClass):
         #@logging_decorator
         def get(self):
             if self.__locked_down:
+                self.fresh_changed_event.set()
                 return None
             while True:
                 self.fresh_lock.acquire()
                 if not self.fresh_queue: # resource locked but no data!
                     self.fresh_lock.release()
+                    #wait for data
                     self.fresh_changed_event.wait()
                     if self.__locked_down:
                         return None
@@ -800,21 +814,17 @@ class HidDevice(HidDeviceBaseClass):
 
         def abort(self):
             self.__abort = True
-            max_time = 1.0
-            while max_time > 0.0 and self.is_alive():
-                time.sleep(0.050)
-                max_time -= 0.050
 
         def run(self):
+            print "%d thread started" % threading.currentThread()
             hid_object = self.hid_object
             while hid_object.is_opened() and not self.__abort:
                 raw_report = hid_object._input_report_queue.get()
                 if not raw_report: continue
                 hid_object._process_raw_report(raw_report)
-
-        def __del__(self):
-            self.abort()
-
+                # reuse the report (avoid allocating new memory)
+                hid_object._input_report_queue.reuse(raw_report)
+        
     class InputReportReaderThread(threading.Thread):
         "Helper to receive input reports"
         def __init__(self, hid_object, raw_report_size):
@@ -824,6 +834,7 @@ class HidDevice(HidDeviceBaseClass):
             self.raw_report_size = raw_report_size
             self.__overlapped_read_obj = None
             if self.raw_report_size:
+                #only if input reports are available
                 self.start()
 
         def abort(self):
@@ -832,15 +843,9 @@ class HidDevice(HidDeviceBaseClass):
             if self.is_alive() and self.__overlapped_read_obj:
                 # force overlapped events completition
                 SetEvent(self.__overlapped_read_obj.h_event)
-            max_time = 1.0
-            while max_time > 0 and self.is_alive():
-                time.sleep(0.050)
-                max_time -= 0.050
-
-        def __del__(self):
-            self.abort() #make sure we do a clean exit
-
+        
         def run(self):
+            print "%d thread started" % threading.currentThread()
             if not self.raw_report_size:
                 # don't raise any error as the hid object can still be used 
                 # for writing reports
@@ -887,7 +892,7 @@ class HidDevice(HidDeviceBaseClass):
                     result = WaitForSingleObject( \
                         self.__overlapped_read_obj.h_event, 
                         INFINITE )
-                    if result != WAIT_OBJECT_0: #success
+                    if result != WAIT_OBJECT_0 or self.__abort: #success
                         break #device has being disconnected
                 else:
                     # it just succeeded (or seemed so)
@@ -898,7 +903,10 @@ class HidDevice(HidDeviceBaseClass):
             over_read = self.__overlapped_read_obj
             self.__overlapped_read_obj = None
             CloseHandle(over_read.h_event)
+            self.__overlapped_read_obj = None
+            del over_read
             hid_object.close()
+            print "%d thread finished" % threading.currentThread()
 
     def __repr__(self):
         return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \

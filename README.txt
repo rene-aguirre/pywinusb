@@ -41,12 +41,12 @@ Installation Instructions
 Windows
 -------
 
-No package releases yet.  For now you can access the code using `from the svn repository`_.
+No package releases yet.  For now you can access the code using `the svn repository`_.
 
 I'm planning initially to have a mature pywinusb.hid name space (sub-package) 
 implementation before attempting any of the pywinusb.winusb stuff.
 
-.. _from the svn repository: http://code.google.com/p/pywinusb/source/checkout
+.. _the svn repository: http://code.google.com/p/pywinusb/source/checkout
 
 Other
 -----
@@ -60,8 +60,7 @@ Using pywinusb.hid
 View the `./examples` directory for some (ok, few right now) scripts. These show,
 for instance, how to use pywinusb.hid to handle events from HID class devices usages events.
 
-A script that shows how to handle a hook control usage, from telephony devices, can be 
-found on the `main project code page`_.
+Gernal purpose instructions can be found on the `main project code page`_.
 
 .. _main project code page: http://code.google.com/p/pywinusb
 
