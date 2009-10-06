@@ -1,6 +1,6 @@
 import os
 from setuptools import setup, find_packages
-VERSION = '0.2.1'
+VERSION = '0.2.2'
 README = os.path.join(os.path.dirname(__file__), 'README.txt')
 long_description = open(README).read() + 'nn'
 setup(name='pywinusb',
@@ -30,7 +30,8 @@ setup(name='pywinusb',
       packages=find_packages(),
       package_data = {
         #other files
-        '':['README.txt', 'LICENSE.txt'],
+        '':['README.txt', 'LICENSE.txt', 'TODO.txt', 'CHANGES.txt',
+            'examples/hook_button.py', 'examples/simple_send.py'],
         },
       namespace_packages=['pywinusb'],
       install_requires=[]

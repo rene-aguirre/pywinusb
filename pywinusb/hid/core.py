@@ -537,7 +537,7 @@ class HidDevice(HidDeviceBaseClass):
         self.hid_handle = None
         #don't clean up the report quque because the
         #consumer & producer threads might neede it
-        #self._input_report_queue = None
+        self._input_report_queue = None
         self.__evt_handlers = dict()
         
         #other
@@ -576,7 +576,7 @@ class HidDevice(HidDeviceBaseClass):
             hid_dll.HidD_FreePreparsedData(self.ptr_preparsed_data)
 
         # wait for the reading thread to complete before closing the device handle
-        while self.__reading_thread.is_alive():
+        while self.__reading_thread and self.__reading_thread.is_alive():
             time.sleep(0.050) # 50 ms latency, just to avoid cpu consumption
 
         if self.hid_handle:

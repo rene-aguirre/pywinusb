@@ -1,3 +1,6 @@
+0.2.2,
+ * Fixing output only mode (no input report for forced open)
+
 0.2.1,
  * Bringing a little bit of stability
  * Output only mode (no reading thread configured)
