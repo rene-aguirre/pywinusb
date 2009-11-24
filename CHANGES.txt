@@ -1,3 +1,6 @@
+0.2.3,
+ * Added HidDevice.set_raw_data_handler(), and corresponding raw_data.py example script
+
 0.2.2,
  * Fixing output only mode (no input report for forced open)
 

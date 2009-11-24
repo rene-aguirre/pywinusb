@@ -1,6 +1,6 @@
 #
 #
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 __author__ = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
 __url__ = 'http://code.google.com/p/pywinusb'
 __all__ = ['tools', 'usage_pages', 'helpers']

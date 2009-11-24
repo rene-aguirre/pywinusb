@@ -62,8 +62,7 @@ def test_telephony_hook():
                             # allow handler to process result
                             input_report.get()
                         
-                        while not kbhit() \
-                            and hid.hid_device_path_exists(device.device_path):
+                        while not kbhit() and device.is_plugged():
                             #just keep the device opened to receive events
                             sleep(0.5)
                         return

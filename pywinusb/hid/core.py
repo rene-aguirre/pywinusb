@@ -294,6 +294,7 @@ class HidDevice(HidDeviceBaseClass):
         "Interface for HID device as referenced by device_path parameter"
         #allow safe access (and object browsing)
         self.__reset_vars() #init hw related vars
+        self.set_raw_data_handler(None)
         self.device_path = device_path
         self.instance_id = instance_id
         self.parent_instance_id = parent_instance_id
@@ -651,7 +652,9 @@ class HidDevice(HidDeviceBaseClass):
     @synchronized(HidDeviceBaseClass._raw_reports_lock)
     def _process_raw_report(self, raw_report):
         "Default raw input report data handler"
-        if not self.__evt_handlers or not self.is_opened():
+        if not self.is_opened():
+            return
+        if not self.__evt_handlers and not self.__raw_handler:
             return
 
         if not raw_report[0]  and \
@@ -662,6 +665,12 @@ class HidDevice(HidDeviceBaseClass):
                 #windows XP sends empty report when disconnecting
                 self.close() #device disconnected
             return
+
+        if self.__raw_handler:
+            #this might slow down data trhoughput, but at the expense of safety
+            self.__raw_handler(ReadOnlyList(raw_report))
+            return
+        
         # using pre-parsed report templates, by report id
         report_template = self.__input_report_templates[raw_report[0]] 
         # old condition
@@ -686,7 +695,11 @@ class HidDevice(HidDeviceBaseClass):
                                 function_handler(new_value, event_kind, handlers[function_handler])
                             else:
                                 function_handler(new_value, event_kind)
-    
+
+    def set_raw_data_handler(self, funct):
+        "Set external raw data handler, set to None to restore default"
+        self.__raw_handler = funct
+
     def find_input_usage(self, full_usage_id):
         "Check if full usage Id included in input reports set"
         for report_id, report_obj in self.__input_report_templates.items():
