@@ -34,7 +34,7 @@ def raw_test():
                 break;
         int_option = int(index_option)
         if int_option:
-            device = all_hids[int_option]
+            device = all_hids[int_option-1]
             try:
                 device.open()
 
