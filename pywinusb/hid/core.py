@@ -1059,7 +1059,7 @@ class ReportItem(object):
         res.append( "page_id=%s"%hex(self.page_id) )
         res.append( "usage_id=%s"%hex(self.usage_id) )
         if self.__value != None:
-            res.append( "value=%s)"%hex(self.__value) )
+            res.append( "value=%s" % str(self.get_value()))
         else:
             res.append( "value=[None])" )
         usage_type = ""
@@ -1187,6 +1187,9 @@ class HidReport(object):
         if self.__raw_data == None: #first time only, create storage
             raw_data_type = c_ubyte * self.__raw_report_size
             self.__raw_data = raw_data_type()
+        elif initial_values == self.__raw_data:
+            # already
+            return
         else:
             #initialize
             ctypes.memset(self.__raw_data, 0, len(self.__raw_data))
@@ -1254,7 +1257,7 @@ class HidReport(object):
                 item.usage_id, #short usage
                 byref(item.value_array), #output data (c_ubyte storage)
                 len(item.value_array), self.__hid_object.ptr_preparsed_data, 
-                byref(raw_data), sizeof(raw_data)) )
+                byref(self.__raw_data), len(self.__raw_data)) )
             #
             
     def __prepare_raw_data(self):
@@ -1402,6 +1405,8 @@ class HidReport(object):
             #success
             if do_process_raw_report:
                 self.__hid_object._process_raw_report(raw_data)
+            else:
+                self.set_raw_data(raw_data)
             return ReadOnlyList(raw_data)
         return ReadOnlyList([])
     #class HIDReport finishes ***********************
