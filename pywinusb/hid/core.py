@@ -568,7 +568,7 @@ class HidDevice(HidDeviceBaseClass):
             self.__input_processing_thread.abort()
         
         #avoid posting new reports
-        if self._input_report_queue:
+        if self._input_report_queue and self.__input_processing_thread.is_alive():
             self._input_report_queue.release_events() #avoid thead deadlocks
                         
         #properly close api handlers and pointers
@@ -576,7 +576,7 @@ class HidDevice(HidDeviceBaseClass):
             hid_dll.HidD_FreePreparsedData(self.ptr_preparsed_data)
 
         # wait for the reading thread to complete before closing the device handle
-        while self.__reading_thread and self.__reading_thread.is_alive():
+        while self.__reading_thread and self.__reading_thread.is_active():
             time.sleep(0.050) # 50 ms latency, just to avoid cpu consumption
 
         if self.hid_handle:
@@ -831,16 +831,19 @@ class HidDevice(HidDeviceBaseClass):
             hid_object = self.hid_object
             while hid_object.is_opened() and not self.__abort:
                 raw_report = hid_object._input_report_queue.get()
-                if not raw_report: continue
+                if not raw_report or self.__abort:
+                    break
                 hid_object._process_raw_report(raw_report)
                 # reuse the report (avoid allocating new memory)
-                hid_object._input_report_queue.reuse(raw_report)
+                if hid_object._input_report_queue:
+                    hid_object._input_report_queue.reuse(raw_report)
         
     class InputReportReaderThread(threading.Thread):
         "Helper to receive input reports"
         def __init__(self, hid_object, raw_report_size):
             threading.Thread.__init__(self)
             self.__abort = False
+            self.__active = False
             self.hid_object = hid_object
             self.raw_report_size = raw_report_size
             self.__overlapped_read_obj = None
@@ -849,11 +852,16 @@ class HidDevice(HidDeviceBaseClass):
                 self.start()
 
         def abort(self):
-            if not self.__abort:
-                self.__abort = True
+            if not self.__active:
+                return
+            self.__abort = True
             if self.is_alive() and self.__overlapped_read_obj:
                 # force overlapped events completition
                 SetEvent(self.__overlapped_read_obj.h_event)
+
+        def is_active(self):
+            "main reading loop is running (bool)"
+            return bool(self.__active)
 
         def run(self):
             if not self.raw_report_size:
@@ -873,6 +881,8 @@ class HidDevice(HidDeviceBaseClass):
             #
             hid_object = self.hid_object
             n = self.raw_report_size
+            #main loop active
+            self.__active = True
             while not self.__abort:
                 #get storage
                 buf_report = hid_object._input_report_queue.get_new()
@@ -909,7 +919,9 @@ class HidDevice(HidDeviceBaseClass):
                     pass
                 # signal raw data already read
                 hid_object._input_report_queue.post( buf_report )
-            #clen up
+            #clean up
+            self.__active = False
+            self.__abort = True
             CancelIo( int(hid_object.hid_handle) )
             over_read = self.__overlapped_read_obj
             self.__overlapped_read_obj = None

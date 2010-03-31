@@ -5,6 +5,7 @@ Release changes
  * Fixed bugs preventing properly setting report usage variables after a HidReport().get()
  * Fixed raw_data.py example
  * Fixed bug preventing proper value array setting/getting items
+ * Fixed deadlock when device unplugged
 
 0.2.3,
  * Added HidDevice.set_raw_data_handler(), and corresponding raw_data.py example script
