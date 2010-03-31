@@ -483,7 +483,6 @@ class HidDevice(HidDeviceBaseClass):
         c_ubyte object with included the required report data
         """
         assert( self.is_opened() )
-
         #make sure we have c_ubyte array storage
         if not ( isinstance(data, ctypes.Array) and \
                 issubclass(data._type_, c_ubyte) ):
@@ -976,10 +975,10 @@ class ReportItem(object):
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
             byte_index = (index * self.__bit_size) / 8
-            byte_index = (index * self.__bit_size) % 8
-            bit_value = (value & ((1 << self.__bit_size) - 1)) << byte_index
-            self.__value[byte_index] &= bit_value
-            self.__value[byte_index] |= bit_value
+            bit_index  = (index * self.__bit_size) % 8
+            bit_mask = ((1 << self.__bit_size) - 1)
+            self.__value[byte_index] &= ~(bit_mask << bit_index)
+            self.__value[byte_index] |= (value & bit_mask) << bit_index
         else:
             raise IndexError
 
@@ -989,8 +988,8 @@ class ReportItem(object):
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
             byte_index = (index * self.__bit_size) / 8
-            byte_index = (index * self.__bit_size) % 8
-            return ((self.__value[byte_index] >> byte_index) & self.__bit_size )
+            bit_index = (index * self.__bit_size) % 8
+            return ((self.__value[byte_index] >> bit_index) & ((1 << self.__bit_size) - 1) )
         else:
             raise IndexError
 
