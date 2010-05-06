@@ -2,7 +2,7 @@
 """
 Simple example on how to send simple reports based on usages
 """
-from pywinusb import hid
+import pywinusb.hid as hid
 
 def click_signal(target_usage, target_vendor_id):
     """This function will find a particular target_usage over output reports on

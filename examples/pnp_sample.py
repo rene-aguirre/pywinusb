@@ -12,11 +12,11 @@ to test if your device 'plug' status has changed.
 """
 
 import wx
-from pywinusb import hid
+import pywinusb.hid as hid
 
 # feel free to test
-target_vendor_id = 0x047f
-target_product_id = 0x0715
+target_vendor_id = 0x1234
+target_product_id = 0x0001
 
 class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
     # a device so we could easily discriminate wich devices to look at

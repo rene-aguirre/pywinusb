@@ -5,7 +5,7 @@ Simple example on how to handle usage control events
 from time import sleep
 from msvcrt import kbhit
 
-from pywinusb import hid
+import pywinusb.hid as hid
 
 def test_telephony_hook():
     """Browse for non system HID class devices, if a telephony page

@@ -8,7 +8,7 @@ Handling raw data inputs example
 from time import sleep
 from msvcrt import kbhit
 
-from pywinusb import hid
+import pywinusb.hid as hid
 
 def sample_handler(data):
     print "Raw data: ", data
