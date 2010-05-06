@@ -1,6 +1,6 @@
 import os
 from setuptools import setup, find_packages
-VERSION = '0.2.4'
+VERSION = '0.2.5'
 README = os.path.join(os.path.dirname(__file__), 'README.txt')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.txt')
 long_description = open(README).read() + open(CHANGES).read() + 'nn'

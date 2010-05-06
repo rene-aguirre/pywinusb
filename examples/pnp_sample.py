@@ -20,11 +20,12 @@ target_product_id = 0x0715
 
 class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
     # a device so we could easily discriminate wich devices to look at
-    my_hid_target = all_devices = hid.HidDeviceFilter(vendor_id = target_vendor_id, product_id = target_product_id)
+    my_hid_target = hid.HidDeviceFilter(vendor_id = target_vendor_id, product_id = target_product_id)
     
     def __init__(self,parent):
         wx.Frame.__init__(self,parent,-1,"Re-plug your USB HID device, watch the command window!...")
         hid.HidPnPWindowMixin.__init__(self, self.GetHandle())
+        wx.EVT_CLOSE(self, self.on_close)
         self.device = None #no hid device... yet
         
         # kick the pnp engine
@@ -32,7 +33,7 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
         
     def on_hid_pnp(self, hid_event = None):
         """This function will be called on per class event changes,
-        saddly for pywinusb 0.2.2 it does assume a single device scenario, anyway this has a patch"""
+        so we need to test if our device has being connected or is just gone"""
         if hid_event:
             print "Hey, a hid device just %s!" % hid_event
             
@@ -53,8 +54,9 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
         else:
             # poll for devices
             self.test_for_connection()
-        # < 0.2.2 fix
-        self.current_status = "unknown"
+        # update ui
+        if old_Device != self.device:
+            self.UpdateUsbStatus(False)
         
     def test_for_connection(self):
         all_items =  MyFrame.my_hid_target.get_devices()
@@ -94,6 +96,11 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
             print "got my device: %s!" % repr(self.device)
         else:
             print "saddly my device is not here... yet :-( "
+
+    def on_close(self, event):
+        event.Skip()
+        if self.device:
+            self.device.close()
             
 if __name__ == "__main__":
     app = wx.App(False)
