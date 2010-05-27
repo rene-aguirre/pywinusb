@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+e!/usr/bin/env python
 # -*- coding: Latin-1 -*-
 
 """
