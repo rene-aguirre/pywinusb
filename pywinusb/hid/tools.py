@@ -56,7 +56,7 @@ Values:     %(hid_caps.number_input_value_caps)d value(s)
 
 Output Report
 ~~~~~~~~~~~~~
-nength:     %(hid_caps.output_report_byte_length)d byte(s)
+length:     %(hid_caps.output_report_byte_length)d byte(s)
 Buttons:    %(hid_caps.number_output_button_caps)d button(s)
 Values:     %(hid_caps.number_output_value_caps)d value(s)
 
