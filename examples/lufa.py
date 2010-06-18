@@ -86,7 +86,7 @@ if __name__ == '__main__':
                     sleep(0.5)
             elif reponse == 2:
                 report = device.find_output_reports(usage_page = usage_page_id,
-                        usage_id = input_usage_id)
+                        usage_id = output_usage_id)
                 if report:
                     print "Input (hex format) data, comma separated,",
                     print "%d values:" % len(report[output_usage])
