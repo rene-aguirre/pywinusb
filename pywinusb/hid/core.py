@@ -537,7 +537,6 @@ class HidDevice(HidDeviceBaseClass):
         self.hid_handle = None
         #don't clean up the report queue because the
         #consumer & producer threads might needed it
-        self._input_report_queue = None
         self.__evt_handlers = dict()
         
         #other
