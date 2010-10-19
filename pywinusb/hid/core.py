@@ -293,6 +293,7 @@ class HidDevice(HidDeviceBaseClass):
     def __init__(self, device_path, parent_instance_id = 0, instance_id=""):
         "Interface for HID device as referenced by device_path parameter"
         #allow safe access (and object browsing)
+        self.__open_status = False
         self.__reset_vars() #initialize hardware related vars
         self.set_raw_data_handler(None)
         self.device_path = device_path
@@ -360,7 +361,6 @@ class HidDevice(HidDeviceBaseClass):
                 _winreg.CloseKey(h_register)
             else:
                 self.product_name = product_name.value
-
         finally:
             # clean up
             CloseHandle(h_hid)
@@ -374,12 +374,8 @@ class HidDevice(HidDeviceBaseClass):
         """Open HID device and obtain 'Collection Information'.
         It effectively prepares the HidDevice object for reading and writing
         """
-        if not self.vendor_id or self.is_opened():
-            return
-
         if self.is_opened():
             raise HIDError("Device already opened")
-
         hid_handle = CreateFile(
             self.device_path,
             GENERIC_READ | GENERIC_WRITE,
@@ -388,19 +384,19 @@ class HidDevice(HidDeviceBaseClass):
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
             0 )
-        if hid_handle == INVALID_HANDLE_VALUE:
+
+        if not hid_handle or hid_handle == INVALID_HANDLE_VALUE:
             raise HIDError("Error opening HID device: %s\n"%self.product_name)
-        
-        self.__open_status = True
-        self.hid_handle = hid_handle
-        
         #get pre parsed data
         ptr_preparsed_data = c_ulong()
         if not hid_dll.HidD_GetPreparsedData(int(hid_handle), 
                 byref(ptr_preparsed_data)):
-            self.close()
+            CloseHandle(int(hid_handle))
             raise HIDError("Failure to get HID pre parsed data")
         self.ptr_preparsed_data = ptr_preparsed_data
+        
+        self.__open_status = True
+        self.hid_handle = hid_handle
         
         #get top level capabilities
         hid_caps = HIDP_CAPS()
@@ -514,6 +510,7 @@ class HidDevice(HidDeviceBaseClass):
         """Send input/output/feature report ID = report_id, data should be a 
         c_byte object with included the required report data
         """
+        assert( self.is_opened() )
         #make sure we have c_ubyte array storage
         if not ( isinstance(data, ctypes.Array) and issubclass(data._type_, 
                 c_ubyte) ):
@@ -529,7 +526,6 @@ class HidDevice(HidDeviceBaseClass):
 
     def __reset_vars(self):
         #reset vars (for init or gc)
-        self.__open_status = False
         self.usages_storage = dict()
         self.report_set = dict()
         self.hid_caps = None
@@ -538,14 +534,12 @@ class HidDevice(HidDeviceBaseClass):
         #don't clean up the report queue because the
         #consumer & producer threads might needed it
         self.__evt_handlers = dict()
-        
         #other
         self.__reading_thread = None
         self.__input_processing_thread = None
-        self._input_roport_queue = None
-        
+        self._input_report_queue = None
         #
-        gc.collect()
+        # gc.collect()
         
     def is_plugged(self):
         return self.device_path and hid_device_path_exists(self.device_path)
@@ -562,17 +556,20 @@ class HidDevice(HidDeviceBaseClass):
         # abort all running threads first
         if self.__reading_thread and self.__reading_thread.is_alive():
             self.__reading_thread.abort()
+
+        #avoid posting new reports
+        if self._input_report_queue:
+            self._input_report_queue.release_events()
+
         if self.__input_processing_thread and \
                 self.__input_processing_thread.is_alive():
             self.__input_processing_thread.abort()
-        
-        #avoid posting new reports
-        if self._input_report_queue and self.__input_processing_thread.is_alive():
-            self._input_report_queue.release_events() #avoid thread deadlocks
-                        
+
         #properly close API handlers and pointers
         if self.ptr_preparsed_data:
-            hid_dll.HidD_FreePreparsedData(self.ptr_preparsed_data)
+            ptr_preparsed_data = self.ptr_preparsed_data 
+            self.ptr_preparsed_data = None
+            hid_dll.HidD_FreePreparsedData(ptr_preparsed_data)
 
         # wait for the reading thread to complete before closing the device handle
         while self.__reading_thread and self.__reading_thread.is_active():
@@ -584,10 +581,6 @@ class HidDevice(HidDeviceBaseClass):
         #reset vars (for GC)
         self.__reset_vars()
 
-    def __del__(self):
-        if self.is_opened():
-            self.close()
-            
     def __find_reports(self, report_type, usage_page, usage_id = 0):
         "Find input report referencing HID usage control/data item"
         if not self.is_opened():
@@ -732,7 +725,7 @@ class HidDevice(HidDeviceBaseClass):
             self.fresh_queue = []
             self.used_lock = threading.Lock()
             self.fresh_lock = threading.Lock()
-            self.fresh_changed_event = threading.Event()
+            self.posted_event = threading.Event()
 
         #@logging_decorator
         def get_new(self):
@@ -743,12 +736,6 @@ class HidDevice(HidDeviceBaseClass):
             if len(self.used_queue):
                 #we can reuse items
                 empty_report = self.used_queue.pop(0)
-                if not self.fresh_queue and self.used_queue:
-                    # the consumer thread seems now faster than the producers, 
-                    # so...
-                    del empty_report
-                    #reduce the spare buffers queue
-                    empty_report = self.used_queue.pop(0)
                 self.used_lock.release()
                 ctypes.memset(empty_report, 0, sizeof(empty_report))
             else:
@@ -758,30 +745,9 @@ class HidDevice(HidDeviceBaseClass):
                 empty_report = self.repport_buffer_type()
             return empty_report
 
-        #@logging_decorator
-        def post(self, raw_report):
-            if self.__locked_down:
-                self.fresh_changed_event.set()
-                return
-            while True:
-                self.fresh_lock.acquire()
-                if len(self.fresh_queue) >= self.max_size:
-                    # instead of waiting for consumption, trash oldest
-                    item = self.fresh_queue.pop(0)
-                    self.reuse(item)
-                    self.fresh_lock.release()
-                    if self.__locked_down:
-                        return
-                    continue
-                break
-            self.fresh_queue.append( raw_report )
-            self.fresh_lock.release()
-            self.fresh_changed_event.set()
-
         def reuse(self, raw_report):
             "Reuse not posted report"
             if self.__locked_down:
-                self.fresh_changed_event.set()
                 return
             if not raw_report:
                 return
@@ -790,30 +756,39 @@ class HidDevice(HidDeviceBaseClass):
             self.used_queue.append(raw_report)
             self.used_lock.release()
 
+
+        #@logging_decorator
+        def post(self, raw_report):
+            if self.__locked_down:
+                self.posted_event.set()
+                return
+            self.fresh_lock.acquire()
+            self.fresh_queue.append( raw_report )
+            self.fresh_lock.release()
+            self.posted_event.set()
+
         #@logging_decorator
         def get(self):
             if self.__locked_down:
-                self.fresh_changed_event.set()
                 return None
-            while True:
-                self.fresh_lock.acquire()
-                if not self.fresh_queue: # resource locked but no data!
-                    self.fresh_lock.release()
-                    #wait for data
-                    self.fresh_changed_event.wait()
-                    if self.__locked_down:
-                        return None
-                    self.fresh_changed_event.clear()
-                    continue
-                break
+            
+            #wait for data
+            self.posted_event.wait()
+            self.fresh_lock.acquire()
+            
+            if self.__locked_down:
+                self.fresh_lock.release()
+                return None
+
             item = self.fresh_queue.pop(0)
+            if not self.fresh_queue:
+                self.fresh_changed_event.clear()
             self.fresh_lock.release()
-            self.fresh_changed_event.set()
             return item
 
         def release_events(self):
             self.__locked_down = True
-            self.fresh_changed_event.set()
+            self.posted_event.set()
 
     class InputReportProcessingThread(threading.Thread):
         "Input reports handler helper class"
@@ -828,15 +803,15 @@ class HidDevice(HidDeviceBaseClass):
 
         def run(self):
             hid_object = self.hid_object
-            while hid_object.is_opened() and not self.__abort:
-                raw_report = hid_object._input_report_queue.get()
+            report_queue = hid_object._input_report_queue
+            while not self.__abort and hid_object.is_opened():
+                raw_report = report_queue.get()
                 if not raw_report or self.__abort:
                     break
                 hid_object._process_raw_report(raw_report)
                 # reuse the report (avoid allocating new memory)
-                if hid_object._input_report_queue:
-                    hid_object._input_report_queue.reuse(raw_report)
-        
+                report_queue.reuse(raw_report)
+    
     class InputReportReaderThread(threading.Thread):
         "Helper to receive input reports"
         def __init__(self, hid_object, raw_report_size):
@@ -844,11 +819,15 @@ class HidDevice(HidDeviceBaseClass):
             self.__abort = False
             self.__active = False
             self.hid_object = hid_object
+            self.report_queue = hid_object._input_report_queue
+            hid_handle = int( hid_object.hid_handle )
             self.raw_report_size = raw_report_size
             self.__overlapped_read_obj = None
-            if self.raw_report_size:
+            if hid_object and hid_handle and self.raw_report_size and self.report_queue:
                 #only if input reports are available
                 self.start()
+            else:
+                hid_object.close()
 
         def abort(self):
             if not self.__active:
@@ -863,12 +842,13 @@ class HidDevice(HidDeviceBaseClass):
             return bool(self.__active)
 
         def run(self):
+            time.sleep(0.050) # this fixes an strange python threading bug
             if not self.raw_report_size:
                 # don't raise any error as the hid object can still be used 
                 # for writing reports
                 raise HIDError("Attempting to read input reports on non "\
                     "capable HID device")
-            
+ 
             over_read = OVERLAPPED()
             over_read.h_event = CreateEvent(None, 0, 0, None)
             if over_read.h_event:
@@ -879,20 +859,20 @@ class HidDevice(HidDeviceBaseClass):
             bytes_read = c_ulong()
             #
             hid_object = self.hid_object
-            n = self.raw_report_size
+            input_report_queue = self.report_queue
+            report_len = int( self.raw_report_size )
             #main loop active
             self.__active = True
             while not self.__abort:
                 #get storage
-                buf_report = hid_object._input_report_queue.get_new()
-                if not buf_report: continue
+                buf_report = input_report_queue.get_new()
+                if not buf_report or self.__abort:
+                    break
                 # async read from device
                 bytes_read.value = 0
-                if self.__abort:
-                    break
-                result = ReadFile(int(hid_object.hid_handle), 
-                    byref(buf_report), int(n), byref(bytes_read), 
-                    byref(self.__overlapped_read_obj) )
+                result = ReadFile(hid_object.hid_handle, 
+                    byref(buf_report), report_len, byref(bytes_read), 
+                    byref(over_read) )
                 if not result:
                     error = ctypes.GetLastError()
                     if error == ERROR_IO_PENDING: #overlapped operation in progress
@@ -909,25 +889,22 @@ class HidDevice(HidDeviceBaseClass):
                     if self.__abort:
                         break
                     result = WaitForSingleObject( \
-                        self.__overlapped_read_obj.h_event, 
+                        over_read.h_event, 
                         INFINITE )
                     if result != WAIT_OBJECT_0 or self.__abort: #success
                         break #device has being disconnected
-                else:
-                    # it just succeeded (or seemed so)
-                    pass
                 # signal raw data already read
-                hid_object._input_report_queue.post( buf_report )
+                if bytes_read.value:
+                    input_report_queue.post( buf_report )
             #clean up
             self.__active = False
-            self.__abort = True
-            CancelIo( int(hid_object.hid_handle) )
-            over_read = self.__overlapped_read_obj
-            self.__overlapped_read_obj = None
+            if not self.__abort:
+                # broadcast event
+                self.__abort = True
+                CancelIo( hid_object.hid_handle )
+                hid_object.close()
             CloseHandle(over_read.h_event)
-            self.__overlapped_read_obj = None
-            del over_read
-            hid_object.close()
+            # del over_read
 
     def __repr__(self):
         return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
@@ -1213,14 +1190,11 @@ class HidReport(object):
         raw_data is c_ubyte ctypes array object type
         """
         #pre-parsed data should exist
-        if not self.__hid_object.ptr_preparsed_data:
-            raise HIDError("HID object close or unable to request pre parsed "\
-                "report data")
+        assert(self.__hid_object.is_opened())
         #valid length
         if len(raw_data) != self.__raw_report_size:
             raise HIDError( "Report size has to be %d elements (bytes)" \
                 % self.__raw_report_size )
-                
         # copy to internal storage
         self.__alloc_raw_data(raw_data)
         
@@ -1395,6 +1369,7 @@ class HidReport(object):
 
     def get(self, do_process_raw_report = True):
         "Read report from device"
+        assert( self.__hid_object.is_opened() )
         if self.__report_kind != HidP_Input and \
                 self.__report_kind != HidP_Feature:
             raise HIDError("Only for input or feature reports")
