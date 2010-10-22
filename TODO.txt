@@ -3,9 +3,8 @@ Pending tasks:
  * Documentation, need to put local documentation on the project, so far, some usage instructions are given in the google code pywinusb site.
 
  * More examples, show the full capabilities currently implemented, all is easy just missing the scripts to show it off
-   a) Handling raw reports
-   b) Handling composite devices
-   c) Handling multiple physical devices
+   a) Handling composite devices
+   b) Handling multiple physical devices
 
  * Give a more useful output for the hid.tools (something more formal as when running the hid.core.py script)
 

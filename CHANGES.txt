@@ -3,6 +3,7 @@ Release changes
 -------------------------
 0.2.5,
  * Tweaked PnP example, added frame closing event handler, so the USB device is closed
+ * Report reading threads and device closing optimizations
 
 0.2.4,
  * Fixed bugs preventing properly setting report usage variables after a HidReport().get()
