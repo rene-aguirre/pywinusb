@@ -6,7 +6,6 @@ This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
 import sys
-import gc
 import ctypes
 import _winreg
 import threading
@@ -539,7 +538,6 @@ class HidDevice(HidDeviceBaseClass):
         self.__input_processing_thread = None
         self._input_report_queue = None
         #
-        # gc.collect()
         
     def is_plugged(self):
         return self.device_path and hid_device_path_exists(self.device_path)
