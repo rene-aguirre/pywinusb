@@ -894,8 +894,7 @@ class HidDevice(HidDeviceBaseClass):
                     if result != WAIT_OBJECT_0 or self.__abort: #success
                         break #device has being disconnected
                 # signal raw data already read
-                if bytes_read.value:
-                    input_report_queue.post( buf_report )
+                input_report_queue.post( buf_report )
             #clean up
             self.__active = False
             if not self.__abort:
