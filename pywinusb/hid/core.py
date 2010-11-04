@@ -699,6 +699,7 @@ class HidDevice(HidDeviceBaseClass):
     def add_event_handler(self, full_usage_id, handler_function, 
             event_kind = HID_EVT_ALL, aux_data = None):
         "Add event handler for usage value/button changes"
+        assert(callable(handler_function)) # must be a function
         if self.find_input_usage(full_usage_id) == None:
             #do not add handler
             return False
@@ -777,8 +778,11 @@ class HidDevice(HidDeviceBaseClass):
             if self.__locked_down:
                 self.fresh_lock.release()
                 return None
-
+            
             item = self.fresh_queue.pop(0)
+            if not self.fresh_queue:
+                # emtpy
+                self.posted_event.clear()
             self.fresh_lock.release()
             return item
 
