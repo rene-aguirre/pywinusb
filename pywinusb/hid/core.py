@@ -779,8 +779,6 @@ class HidDevice(HidDeviceBaseClass):
                 return None
 
             item = self.fresh_queue.pop(0)
-            if not self.fresh_queue:
-                self.fresh_changed_event.clear()
             self.fresh_lock.release()
             return item
 
