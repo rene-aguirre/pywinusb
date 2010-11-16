@@ -662,7 +662,7 @@ class HidDevice(HidDeviceBaseClass):
         
         # using pre-parsed report templates, by report id
         report_template = self.__input_report_templates[raw_report[0]] 
-        # old condition
+        # old condition snapshot
         old_values = report_template.get_usages()
         # parse incoming data
         report_template.set_raw_data(raw_report)
@@ -698,17 +698,21 @@ class HidDevice(HidDeviceBaseClass):
 
     def add_event_handler(self, full_usage_id, handler_function, 
             event_kind = HID_EVT_ALL, aux_data = None):
-        "Add event handler for usage value/button changes"
-        assert(callable(handler_function)) # must be a function
-        if self.find_input_usage(full_usage_id) == None:
-            #do not add handler
+        """Add event handler for usage value/button changes, 
+        returns True if the handler function was updated"""
+        report_id = self.find_input_usage(full_usage_id) 
+        if report_id != None:
+            # allow first zero to trigger changes and releases events
+            self.__input_report_templates[report_id][full_usage_id].__value = None
+        if report_id == None or not handler_function:
+            # do not add handler
             return False
-        #get dictionary for full usages
+        assert(callable(handler_function)) # must be a function
+        # get dictionary for full usages
         top_map_handler = self.__evt_handlers.get(full_usage_id, dict())
         event_handler_set = top_map_handler.get(event_kind, dict())
-        if handler_function not in event_handler_set:
-            #add a new handler
-            event_handler_set[handler_function] = aux_data
+        # update handler
+        event_handler_set[handler_function] = aux_data
         if event_kind not in top_map_handler:
             top_map_handler[event_kind] = event_handler_set
         if full_usage_id not in self.__evt_handlers:
