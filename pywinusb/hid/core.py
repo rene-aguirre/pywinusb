@@ -767,8 +767,8 @@ class HidDevice(HidDeviceBaseClass):
                 return
             self.fresh_lock.acquire()
             self.fresh_queue.append( raw_report )
-            self.fresh_lock.release()
             self.posted_event.set()
+            self.fresh_lock.release()
 
         #@logging_decorator
         def get(self):
