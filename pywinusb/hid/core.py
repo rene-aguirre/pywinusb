@@ -459,7 +459,8 @@ class HidDevice(HidDeviceBaseClass):
 
         #now prepare the input report handler
         self.__input_report_templates = dict()
-        if not output_only and hid_caps.input_report_byte_length:
+        if not output_only and hid_caps.input_report_byte_length and \
+                HidP_Input in self.report_set:
             #first make templates for easy parsing input reports
             for report_id in self.report_set[HidP_Input]:
                 self.__input_report_templates[report_id] = \
