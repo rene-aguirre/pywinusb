@@ -1,5 +1,13 @@
 import os
-from setuptools import setup, find_packages
+try:
+    from setuptools import setup, find_packages
+except ImportError:
+    import sys
+    from distutils.core import setup
+    print "The Setuptools package is not in your Python packages path.\n" \
+            "As an alternative copy the ./pywinusb sub-folder content to your " \
+            "Python packages path (i.e. C:\Python26\Lib\site\packages\)"
+    sys.exit(1)
 VERSION = '0.2.5'
 README = os.path.join(os.path.dirname(__file__), 'README.txt')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.txt')
@@ -34,6 +42,5 @@ setup(name='pywinusb',
         '':['README.txt', 'LICENSE.txt', 'TODO.txt', 'CHANGES.txt',
             'examples/hook_button.py', 'examples/simple_send.py'],
         },
-      namespace_packages=['pywinusb'],
-      install_requires=[]
+      namespace_packages=['pywinusb']
       )
