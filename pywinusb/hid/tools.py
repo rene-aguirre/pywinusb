@@ -32,6 +32,7 @@ Top Level Details
 
 Manufacturer String:    %(vendor_name)s
 Product Sting:          %(product_name)s
+Serial Number:          %(serial_number)s
 
 Vendor ID:              0x%(vendor_id)04x
 Product ID:             0x%(product_id)04x

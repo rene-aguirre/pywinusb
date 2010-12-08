@@ -271,7 +271,8 @@ class HidDeviceBaseClass(object):
 
 class HidDevice(HidDeviceBaseClass):
     MAX_MANUFACTURER_STRING_LEN = 128 #it's actually 126 + 1 (null)
-    MAX_PRODUCT_STRING_LEN = 128 #it's actually 126 + 1 (null)
+    MAX_PRODUCT_STRING_LEN      = 128 #it's actually 126 + 1 (null)
+    MAX_SERIAL_NUMBER_LEN       = 64
     
     _filter_attributes_ = ["vendor_id", "product_id", "version_number", 
         "product_name", "vendor_name"]
@@ -300,6 +301,7 @@ class HidDevice(HidDeviceBaseClass):
         self.parent_instance_id = parent_instance_id
         self.product_name = ""
         self.vendor_name = ""
+        self.serial_number = ""
         self.vendor_id  = 0
         self.product_id = 0
         self.version_number = 0
@@ -308,8 +310,8 @@ class HidDevice(HidDeviceBaseClass):
         # HID device handle first
         h_hid = INVALID_HANDLE_VALUE
         try:
-            h_hid = CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
-                FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0)
+            h_hid = int( CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
+                FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0))
         except:
             pass
         
@@ -320,7 +322,7 @@ class HidDevice(HidDeviceBaseClass):
             # get device attributes
             hidd_attributes = HIDD_ATTRIBUTES()
             hidd_attributes.cb_size = sizeof(hidd_attributes)
-            if not hid_dll.HidD_GetAttributes(int(h_hid), 
+            if not hid_dll.HidD_GetAttributes(h_hid, 
                     byref(hidd_attributes) ):
                 return #can't read attributes
 
@@ -332,7 +334,7 @@ class HidDevice(HidDeviceBaseClass):
             # manufacturer string
             vendor_string_type = c_wchar * self.MAX_MANUFACTURER_STRING_LEN
             vendor_name = vendor_string_type()
-            if not hid_dll.HidD_GetManufacturerString(int(h_hid), 
+            if not hid_dll.HidD_GetManufacturerString(h_hid, 
                     byref(vendor_name), 
                     sizeof(vendor_name)) or not len(vendor_name.value):
                 # would be any possibility to get a vendor id table?, 
@@ -344,7 +346,7 @@ class HidDevice(HidDeviceBaseClass):
             # string buffer for product string
             product_name_type = c_wchar * self.MAX_PRODUCT_STRING_LEN
             product_name = product_name_type()
-            if not hid_dll.HidD_GetProductString(int(h_hid), 
+            if not hid_dll.HidD_GetProductString(h_hid, 
                         byref(product_name), 
                         sizeof(product_name)) or not len(product_name.value):
                 # alternate method, refer to windows registry for product 
@@ -360,6 +362,16 @@ class HidDevice(HidDeviceBaseClass):
                 _winreg.CloseKey(h_register)
             else:
                 self.product_name = product_name.value
+
+            # serial number string
+            serial_number_string = c_wchar * self.MAX_SERIAL_NUMBER_LEN
+            serial_number = serial_number_string()
+            if not hid_dll.HidD_GetSerialNumberString(h_hid, 
+                    byref(serial_number),
+                    sizeof(serial_number)) or not len(serial_number.value):
+                self.serial_number = ""
+            else:
+                self.serial_number = serial_number.value
         finally:
             # clean up
             CloseHandle(h_hid)
