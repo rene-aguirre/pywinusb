@@ -2,7 +2,7 @@
 import ctypes
 from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort, c_wchar
 from ctypes import byref, POINTER
-from ctypes.wintypes import c_char, ULONG, BOOLEAN, BYTE, WORD, DWORD
+from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD
 #from core import HIDError
 from helpers import HIDError, InspectStruct
 
