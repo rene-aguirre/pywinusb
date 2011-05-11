@@ -172,12 +172,12 @@ def find_all_hid_devices():
                 SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), 
                         byref(device_instance_id), required_size, 
                         byref(required_size) )
-                hid_device = HidDevice(unicode(dev_inter_detail_data.device_path), 
+                hid_device = HidDevice(dev_inter_detail_data.device_path, 
                         parent_device.value, device_instance_id.value )
                 del device_instance_id
                 del device_instance_id_type
             else:
-                hid_device = HidDevice(unicode(dev_inter_detail_data.device_path), 
+                hid_device = HidDevice(dev_inter_detail_data.device_path, 
                         parent_device.value )
             # add device to results
             if hid_device.vendor_id: #this means device it's not protected
@@ -616,7 +616,7 @@ class HidDevice(HidDeviceBaseClass):
         self.__reset_vars()
 
         while button_caps_storage:
-            item = self.__button_caps_storage.pop()
+            item = button_caps_storage.pop()
             del item
 
     def __find_reports(self, report_type, usage_page, usage_id = 0):
@@ -968,7 +968,7 @@ class ReportItem(object):
             self.usage_id = caps_record.union.not_range.usage
         else:
             self.usage_id = usage_id
-        self.__report_id_value = caps_record.report_id.value
+        self.__report_id_value = caps_record.report_id
         self.page_id = caps_record.usage_page
         self.__value = 0
         if caps_record.is_range:
