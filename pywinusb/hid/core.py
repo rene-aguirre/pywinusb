@@ -168,22 +168,30 @@ def find_all_hid_devices():
                 0, byref(required_size) )
             if required_size.value > 0:
                 device_instance_id_type = c_tchar * required_size.value
-                deviceinstance_id = device_instance_id_type()
+                device_instance_id = device_instance_id_type()
                 SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), 
-                        byref(deviceinstance_id), required_size, 
+                        byref(device_instance_id), required_size, 
                         byref(required_size) )
-                hid_device = HidDevice(dev_inter_detail_data.device_path, 
-                        parent_device.value, deviceinstance_id.value )
+                hid_device = HidDevice(unicode(dev_inter_detail_data.device_path), 
+                        parent_device.value, device_instance_id.value )
+                del device_instance_id
+                del device_instance_id_type
             else:
-                hid_device = HidDevice(dev_inter_detail_data.device_path, 
+                hid_device = HidDevice(unicode(dev_inter_detail_data.device_path), 
                         parent_device.value )
             # add device to results
             if hid_device.vendor_id: #this means device it's not protected
                 results.append(hid_device)
-
+        # start collecting
+        del dev_info_data
+        del dev_inter_detail_data
+        del dev_interface_data
     finally:
         # clean up
         setup_api.SetupDiDestroyDeviceInfoList(h_info)
+    # more clean up
+    del hid_guid
+
     return results
 
 class HidDeviceFilter(object):
@@ -322,14 +330,15 @@ class HidDevice(HidDeviceBaseClass):
             # get device attributes
             hidd_attributes = HIDD_ATTRIBUTES()
             hidd_attributes.cb_size = sizeof(hidd_attributes)
-            if not hid_dll.HidD_GetAttributes(h_hid, 
-                    byref(hidd_attributes) ):
+            if not hid_dll.HidD_GetAttributes(h_hid, byref(hidd_attributes)):
+                del hidd_attributes
                 return #can't read attributes
 
             #set local references
             self.vendor_id  = hidd_attributes.vendor_id
             self.product_id = hidd_attributes.product_id
             self.version_number = hidd_attributes.version_number
+            del hidd_attributes
 
             # manufacturer string
             vendor_string_type = c_wchar * self.MAX_MANUFACTURER_STRING_LEN
@@ -342,6 +351,8 @@ class HidDevice(HidDeviceBaseClass):
                 self.vendor_name = "Unknown manufacturer"
             else:
                 self.vendor_name = vendor_name.value
+            del vendor_name
+            del vendor_string_type
 
             # string buffer for product string
             product_name_type = c_wchar * self.MAX_PRODUCT_STRING_LEN
@@ -362,6 +373,8 @@ class HidDevice(HidDeviceBaseClass):
                 _winreg.CloseKey(h_register)
             else:
                 self.product_name = product_name.value
+            del product_name_type
+            del product_name
 
             # serial number string
             serial_number_string = c_wchar * self.MAX_SERIAL_NUMBER_LEN
@@ -372,6 +385,8 @@ class HidDevice(HidDeviceBaseClass):
                 self.serial_number = ""
             else:
                 self.serial_number = serial_number.value
+            del serial_number_string
+            del serial_number
         finally:
             # clean up
             CloseHandle(h_hid)
@@ -406,13 +421,16 @@ class HidDevice(HidDeviceBaseClass):
             raise HIDError("Failure to get HID pre parsed data")
         self.ptr_preparsed_data = ptr_preparsed_data
         
-        self.__open_status = True
         self.hid_handle = hid_handle
         
         #get top level capabilities
         hid_caps = HIDP_CAPS()
         HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps)) )
-        self.hid_caps = hid_caps
+        self.number_feature_button_caps = hid_caps.number_feature_button_caps
+        self.number_feature_value_caps  = hid_caps.number_feature_value_caps
+        self.input_report_byte_length   = hid_caps.input_report_byte_length
+        self.output_report_byte_length  = hid_caps.output_report_byte_length
+        self.feature_report_byte_length = hid_caps.feature_report_byte_length
         
         #proceed with button capabilities
         caps_length = c_ulong()
@@ -449,6 +467,7 @@ class HidDevice(HidDeviceBaseClass):
             #create storage for control/data
             ctrl_array_type = struct_kind * max_items
             ctrl_array = ctrl_array_type()
+            self.__button_caps_storage.append( ctrl_array )
 
             #target max size for API function
             caps_length.value = max_items
@@ -484,7 +503,10 @@ class HidDevice(HidDeviceBaseClass):
                     HidDevice.InputReportProcessingThread(self)
             self.__reading_thread = HidDevice.InputReportReaderThread( \
                 self, hid_caps.input_report_byte_length)
-        #
+        # clean up
+        del caps_length
+        del hid_caps
+        self.__open_status = True
 
     def send_output_report(self, data):
         """Send input/output/feature report ID = report_id, data should be a 
@@ -538,9 +560,9 @@ class HidDevice(HidDeviceBaseClass):
 
     def __reset_vars(self):
         #reset vars (for init or gc)
+        self.__button_caps_storage = list()
         self.usages_storage = dict()
         self.report_set = dict()
-        self.hid_caps = None
         self.ptr_preparsed_data = None
         self.hid_handle = None
         #don't clean up the report queue because the
@@ -590,7 +612,12 @@ class HidDevice(HidDeviceBaseClass):
             CloseHandle(self.hid_handle)
             
         #reset vars (for GC)
+        button_caps_storage = self.__button_caps_storage
         self.__reset_vars()
+
+        while button_caps_storage:
+            item = self.__button_caps_storage.pop()
+            del item
 
     def __find_reports(self, report_type, usage_page, usage_id = 0):
         "Find input report referencing HID usage control/data item"
@@ -612,8 +639,8 @@ class HidDevice(HidDeviceBaseClass):
         return results
 
     def count_all_feature_reports(self):
-        return self.hid_caps.number_feature_button_caps + \
-            self.hid_caps.number_feature_value_caps
+        return self.number_feature_button_caps + \
+            self.number_feature_value_caps
 
     def find_input_reports(self, usage_page = 0, usage_id = 0):
         "Find input reports referencing HID usage item"
@@ -931,7 +958,6 @@ class ReportItem(object):
     def __init__(self, hid_report, caps_record, usage_id = 0):
         # from here we can get the parent hid_object
         self.hid_report = hid_report
-        self.caps_record = caps_record
         self.__is_button = isinstance(caps_record, HIDP_BUTTON_CAPS)
         self.__is_value = isinstance(caps_record, HIDP_VALUE_CAPS)
         self.__is_value_array = bool(self.__is_value and \
@@ -942,7 +968,7 @@ class ReportItem(object):
             self.usage_id = caps_record.union.not_range.usage
         else:
             self.usage_id = usage_id
-        self.__report_id = c_ubyte(caps_record.report_id)
+        self.__report_id_value = caps_record.report_id.value
         self.page_id = caps_record.usage_page
         self.__value = 0
         if caps_record.is_range:
@@ -1055,6 +1081,11 @@ class ReportItem(object):
             return abuffer.value
         return ""
 
+    #read only properties
+    @property
+    def report_id(self):
+        return self.__report_id_value
+
     def __repr__(self):
         res = []
         if self.string_index:
@@ -1087,12 +1118,12 @@ class HidReport(object):
     #
     def __init__(self, hid_object, report_type, report_id):
         if report_type == HidP_Input:
-            self.__raw_report_size = hid_object.hid_caps.input_report_byte_length
+            self.__raw_report_size = hid_object.input_report_byte_length
         elif report_type == HidP_Output:
-            self.__raw_report_size = hid_object.hid_caps.output_report_byte_length
+            self.__raw_report_size = hid_object.output_report_byte_length
         elif report_type == HidP_Feature:
             self.__raw_report_size = \
-                hid_object.hid_caps.feature_report_byte_length
+                hid_object.feature_report_byte_length
         else:
             raise HIDError("Unsupported report type")
         self.__report_kind = report_type  #target report type
@@ -1138,7 +1169,7 @@ class HidReport(object):
         return self.__report_kind_dict[self.__report_kind]
 
     @property
-    def hid_objectect(self):
+    def hid_object(self):
         return self.__hid_object
 
     def __repr__(self):
