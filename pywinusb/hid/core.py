@@ -491,6 +491,10 @@ class HidDevice(HidDeviceBaseClass):
                 self.report_set[report_kind].add( usage_item.report_id )
             del ctrl_array_struct
             del ctrl_array_type
+        
+        # now is the time to consider the device opened, as report
+        # handling threads enforce it
+        self.__open_status = True
 
         #now prepare the input report handler
         self.__input_report_templates = dict()
@@ -508,7 +512,6 @@ class HidDevice(HidDeviceBaseClass):
             self.__reading_thread = HidDevice.InputReportReaderThread( \
                 self, hid_caps.input_report_byte_length)
         # clean up
-        self.__open_status = True
 
     def send_output_report(self, data):
         """Send input/output/feature report ID = report_id, data should be a 
@@ -911,7 +914,7 @@ class HidDevice(HidDeviceBaseClass):
             #
             hid_object = self.hid_object
             input_report_queue = self.report_queue
-            report_len = int( self.raw_report_size )
+            report_len = self.raw_report_size
             #main loop active
             self.__active = True
             while not self.__abort:
@@ -954,7 +957,7 @@ class HidDevice(HidDeviceBaseClass):
                 CancelIo( hid_object.hid_handle )
                 hid_object.close()
             CloseHandle(over_read.h_event)
-            # del over_read
+            del over_read
 
     def __repr__(self):
         return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
