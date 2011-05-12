@@ -968,8 +968,8 @@ class ReportItem(object):
     def __init__(self, hid_report, caps_record, usage_id = 0):
         # from here we can get the parent hid_object
         self.hid_report = hid_report
-        self.__is_button = isinstance(caps_record, HIDP_BUTTON_CAPS)
-        self.__is_value = isinstance(caps_record, HIDP_VALUE_CAPS)
+        self.__is_button = caps_record.is_button
+        self.__is_value  = caps_record.is_value
         self.__is_value_array = bool(self.__is_value and \
             caps_record.report_count > 1)
         self.__bit_size = 1
@@ -1471,6 +1471,14 @@ class HidPUsageCaps(object):
             if fname.startswith('reserved'): continue
             if fname == 'union': continue
             setattr(self, fname, int(getattr(range_struct, fname)))
+        self.is_value  = False
+        self.is_button = True
+        if isinstance(caps,  HIDP_BUTTON_CAPS):
+            self.is_button = True
+        elif isinstance(caps, HIDP_VALUE_CAPS):
+            self.is_value = True
+        else:
+            pass
 
     def inspect(self):
         results = []
