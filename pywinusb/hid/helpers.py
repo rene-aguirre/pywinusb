@@ -53,17 +53,6 @@ def synchronized(lock):
         return new_function
     return wrap
 
-def InspectStruct(struct_obj):
-    result = []
-    result.append(repr(struct_obj))
-    for field, t in struct_obj._fields_:
-        value = getattr(struct_obj, field)
-        if issubclass(t, c_char):
-            result.append("\t%s: 0x%x"%(field, ord(value)) )
-        else:
-            result.append("\t%s: %s"%(field, str(value)) )
-    return '\n'.join(result)
-
 class ReadOnlyList(UserList):
     "Read only sequence wrapper"
     def __init__(self, any_list):

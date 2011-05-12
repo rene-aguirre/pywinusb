@@ -86,6 +86,8 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
     finally:
         # clean up
         setup_api.SetupDiDestroyDeviceInfoList(h_info)
+        del dev_inter_detail_data
+        del device_interface
     #
     return False
 
@@ -293,10 +295,14 @@ class HidDevice(HidDeviceBaseClass):
             return ""
         dev_buffer_type = c_tchar * MAX_DEVICE_ID_LEN
         dev_buffer = dev_buffer_type()
-        if CM_Get_Device_ID(self.parent_instance_id, byref(dev_buffer), 
-                MAX_DEVICE_ID_LEN, 0) == 0: #success
-            return dev_buffer.value
-        return ""
+        try:
+            if CM_Get_Device_ID(self.parent_instance_id, byref(dev_buffer), 
+                    MAX_DEVICE_ID_LEN, 0) == 0: #success
+                return dev_buffer.value
+            return ""
+        finally:
+            del dev_buffer
+            del dev_buffer_type
 
     def __init__(self, device_path, parent_instance_id = 0, instance_id=""):
         "Interface for HID device as referenced by device_path parameter"
@@ -373,8 +379,8 @@ class HidDevice(HidDeviceBaseClass):
                 _winreg.CloseKey(h_register)
             else:
                 self.product_name = product_name.value
-            del product_name_type
             del product_name
+            del product_name_type
 
             # serial number string
             serial_number_string = c_wchar * self.MAX_SERIAL_NUMBER_LEN
@@ -385,8 +391,8 @@ class HidDevice(HidDeviceBaseClass):
                 self.serial_number = ""
             else:
                 self.serial_number = serial_number.value
-            del serial_number_string
             del serial_number
+            del serial_number_string
         finally:
             # clean up
             CloseHandle(h_hid)
@@ -424,40 +430,37 @@ class HidDevice(HidDeviceBaseClass):
         self.hid_handle = hid_handle
         
         #get top level capabilities
-        hid_caps = HIDP_CAPS()
-        HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps)) )
-        self.number_feature_button_caps = hid_caps.number_feature_button_caps
-        self.number_feature_value_caps  = hid_caps.number_feature_value_caps
-        self.input_report_byte_length   = hid_caps.input_report_byte_length
-        self.output_report_byte_length  = hid_caps.output_report_byte_length
-        self.feature_report_byte_length = hid_caps.feature_report_byte_length
+        hid_caps_struct = HIDP_CAPS()
+        HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps_struct)) )
+        self.hid_caps = hid_caps = HidPCaps(hid_caps_struct)
+        del hid_caps_struct
         
         #proceed with button capabilities
         caps_length = c_ulong()
 
         all_items = [\
             (HidP_Input,   HIDP_BUTTON_CAPS, 
-                int(hid_caps.number_input_button_caps),    
+                hid_caps.number_input_button_caps,    
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Input,   HIDP_VALUE_CAPS,  
-                int(hid_caps.number_input_value_caps),     
+                hid_caps.number_input_value_caps,     
                 hid_dll.HidP_GetValueCaps
             ),
             (HidP_Output,  HIDP_BUTTON_CAPS, 
-                int(hid_caps.number_output_button_caps),   
+                hid_caps.number_output_button_caps,   
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Output,  HIDP_VALUE_CAPS,  
-                int(hid_caps.number_output_value_caps),    
+                hid_caps.number_output_value_caps,    
                 hid_dll.HidP_GetValueCaps
             ),
             (HidP_Feature, HIDP_BUTTON_CAPS, 
-                int(hid_caps.number_feature_button_caps),  
+                hid_caps.number_feature_button_caps,  
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Feature, HIDP_VALUE_CAPS, 
-                int(hid_caps.number_feature_value_caps),
+                hid_caps.number_feature_value_caps,
                 hid_dll.HidP_GetValueCaps
             ),
         ]
@@ -466,19 +469,18 @@ class HidDevice(HidDeviceBaseClass):
             if not int(max_items): continue #nothing here
             #create storage for control/data
             ctrl_array_type = struct_kind * max_items
-            ctrl_array = ctrl_array_type()
-            self.__button_caps_storage.append( ctrl_array )
+            ctrl_array_struct = ctrl_array_type()
 
             #target max size for API function
             caps_length.value = max_items
             HidStatus( get_control_caps(\
                 report_kind,
-                byref(ctrl_array),
+                byref(ctrl_array_struct),
                 byref(caps_length),
                 ptr_preparsed_data) )
             #keep reference of usages
             for idx in range(caps_length.value):
-                usage_item = ctrl_array[idx]
+                usage_item = HidPUsageCaps( ctrl_array_struct[idx] )
                 #by report type
                 if not self.usages_storage.has_key(report_kind):
                     self.usages_storage[report_kind] = list()
@@ -487,6 +489,8 @@ class HidDevice(HidDeviceBaseClass):
                 if not self.report_set.has_key(report_kind):
                     self.report_set[report_kind] = set()
                 self.report_set[report_kind].add( usage_item.report_id )
+            del ctrl_array_struct
+            del ctrl_array_type
 
         #now prepare the input report handler
         self.__input_report_templates = dict()
@@ -504,8 +508,6 @@ class HidDevice(HidDeviceBaseClass):
             self.__reading_thread = HidDevice.InputReportReaderThread( \
                 self, hid_caps.input_report_byte_length)
         # clean up
-        del caps_length
-        del hid_caps
         self.__open_status = True
 
     def send_output_report(self, data):
@@ -610,7 +612,12 @@ class HidDevice(HidDeviceBaseClass):
 
         if self.hid_handle:
             CloseHandle(self.hid_handle)
-            
+        
+        # make sure report procesing thread is closed
+        if self.__input_processing_thread:
+            while self.__input_processing_thread.is_alive():
+                time.sleep(0.050)
+
         #reset vars (for GC)
         button_caps_storage = self.__button_caps_storage
         self.__reset_vars()
@@ -639,8 +646,8 @@ class HidDevice(HidDeviceBaseClass):
         return results
 
     def count_all_feature_reports(self):
-        return self.number_feature_button_caps + \
-            self.number_feature_value_caps
+        return self.hid_caps.number_feature_button_caps + \
+            self.hid_caps.number_feature_value_caps
 
     def find_input_reports(self, usage_page = 0, usage_id = 0):
         "Find input reports referencing HID usage item"
@@ -965,25 +972,23 @@ class ReportItem(object):
         self.__bit_size = 1
         self.__report_count = 1
         if not caps_record.is_range:
-            self.usage_id = caps_record.union.not_range.usage
+            self.usage_id = caps_record.usage
         else:
             self.usage_id = usage_id
         self.__report_id_value = caps_record.report_id
         self.page_id = caps_record.usage_page
         self.__value = 0
         if caps_record.is_range:
-            #reference to usage within usage range
-            union = caps_record.union.range
-            offset = union.usage_min - usage_id
-            self.data_index = union.data_index_min + offset
-            self.string_index = union.string_min + offset
-            self.designator_index = union.designator_min + offset
+            #reference to usage within usage ange
+            offset = caps_record.usage_min - usage_id
+            self.data_index = caps_record.data_index_min + offset
+            self.string_index = caps_record.string_min + offset
+            self.designator_index = caps_record.designator_min + offset
         else:
             #straight reference
-            union = caps_record.union.not_range
-            self.data_index = union.data_index
-            self.string_index = union.string_index
-            self.designator_index = union.designator_index
+            self.data_index = caps_record.data_index
+            self.string_index = caps_record.string_index
+            self.designator_index = caps_record.designator_index
         #verify it item is value array
         if self.__is_value:
             if self.__is_value_array:
@@ -1118,12 +1123,12 @@ class HidReport(object):
     #
     def __init__(self, hid_object, report_type, report_id):
         if report_type == HidP_Input:
-            self.__raw_report_size = hid_object.input_report_byte_length
+            self.__raw_report_size = hid_object.hid_caps.input_report_byte_length
         elif report_type == HidP_Output:
-            self.__raw_report_size = hid_object.output_report_byte_length
+            self.__raw_report_size = hid_object.hid_caps.output_report_byte_length
         elif report_type == HidP_Feature:
             self.__raw_report_size = \
-                hid_object.feature_report_byte_length
+                hid_object.hid_caps.feature_report_byte_length
         else:
             raise HIDError("Unsupported report type")
         self.__report_kind = report_type  #target report type
@@ -1143,8 +1148,8 @@ class HidReport(object):
                     self.__items[report_item.key()] = report_item
                     self.__idx_items[report_item.data_index] = report_item
                 else:
-                    for usage_id in range(item.union.range.usage_min, 
-                            item.union.range.usage_max):
+                    for usage_id in range(item.usage_min, 
+                            item.usage_max):
                         report_item =  ReportItem(self, item, usage_id)
                         self.__items[report_item.key()] = report_item
                         self.__idx_items[report_item.data_index] = report_item
@@ -1442,6 +1447,36 @@ class HidReport(object):
             return ReadOnlyList(raw_data)
         return ReadOnlyList([])
     #class HIDReport finishes ***********************
+
+class HidPCaps(object):
+    def __init__(self, hidp_caps):
+        for fname, ftype in hidp_caps._fields_:
+            if fname == 'reserved': continue
+            setattr(self, fname, int(getattr(hidp_caps, fname)))
+
+class HidPUsageCaps(object):
+    def __init__(self, caps):
+        for fname, ftype in caps._fields_:
+            if fname.startswith('reserved'): continue
+            if fname == 'union': continue
+            setattr(self, fname, int(getattr(caps, fname)))
+        if caps.is_range:
+            range_struct = caps.union.range
+        else:
+            range_struct = caps.union.not_range
+        for fname, ftype in range_struct._fields_:
+            if fname.startswith('reserved'): continue
+            if fname == 'union': continue
+            setattr(self, fname, int(getattr(range_struct, fname)))
+
+    def inspect(self):
+        results = []
+        for fname in dir(self):
+            if not fname.startswith('_'):
+                value = getattr(self, fname)
+                if callable(value): continue
+                results.append("    %s: %s\n" % (fname, value))
+        return "".join( results )
 
 def simple_test():
     # simple test

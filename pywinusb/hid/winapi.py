@@ -4,7 +4,7 @@ from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort,
 from ctypes import byref, POINTER
 from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD
 #from core import HIDError
-from helpers import HIDError, InspectStruct
+from helpers import HIDError
 
 def os_supports_unicode():
     return False
@@ -156,11 +156,6 @@ class HIDP_BUTTON_CAPS(Structure):
         ("reserved", c_ulong * 10),
         ("union", RANGE_NOT_RANGE)
     ]
-    def InspectStruct(self):
-        if self.is_range:
-            return InspectStruct(self)+InspectStruct(self.union.range)
-        else:
-            return InspectStruct(self)+InspectStruct(self.union.not_range)
             
 class HIDP_VALUE_CAPS(Structure):
     class RANGE_NOT_RANGE(Union):
@@ -209,11 +204,6 @@ class HIDP_VALUE_CAPS(Structure):
         ("physical_max", c_long),
         ("union", RANGE_NOT_RANGE)
     ]
-    def InspectStruct(self):
-        if self.is_range:
-            return InspectStruct(self)+InspectStruct(self.union.range)
-        else:
-            return InspectStruct(self)+InspectStruct(self.union.not_range)
 
 class HIDP_DATA(Structure):
     class HIDP_DATA_VALUE(Union):

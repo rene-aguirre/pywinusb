@@ -75,4 +75,4 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
         if all_usages:
             print '*** %s Caps ***' % {HidP_Input:"Input", HidP_Output:"Output", HidP_Feature:"Feature"}[report_kind]
             for usage_item in all_usages:
-                print usage_item.InspectStruct()
+                print usage_item.inspect()
