@@ -1472,7 +1472,7 @@ class HidPUsageCaps(object):
             if fname == 'union': continue
             setattr(self, fname, int(getattr(range_struct, fname)))
         self.is_value  = False
-        self.is_button = True
+        self.is_button = False
         if isinstance(caps,  HIDP_BUTTON_CAPS):
             self.is_button = True
         elif isinstance(caps, HIDP_VALUE_CAPS):
