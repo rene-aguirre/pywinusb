@@ -1,6 +1,8 @@
 -------------------------
 Release changes
 -------------------------
+0.2.7,
+ * Fixing sending output / feature reports
 
 0.2.6,
  * Fixed broken input report handling
