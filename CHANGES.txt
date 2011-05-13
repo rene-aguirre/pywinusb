@@ -2,8 +2,9 @@
 Release changes
 -------------------------
 
-0.2.5,
+0.2.6,
  * Fixed broken input report handling
+ * Stability improvements
 
 0.2.5,
  * Tweaked PnP example, added frame closing event handler, so the USB device is closed
