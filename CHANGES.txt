@@ -1,6 +1,9 @@
 -------------------------
 Release changes
 -------------------------
+0.2.8,
+ * Fixed broken value array usages transactions
+
 0.2.7,
  * Fixing sending output / feature reports
 

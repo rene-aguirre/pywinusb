@@ -740,7 +740,14 @@ class HidDevice(HidDeviceBaseClass):
         self.__raw_handler = funct
 
     def find_input_usage(self, full_usage_id):
-        "Check if full usage Id included in input reports set"
+        """Check if full usage Id included in input reports set
+        Parameters:
+            full_usage_id       Full target usage, use get_full_usage_id
+
+        Returns:
+            Report ID as integer value, or None if report does not exist with
+            target usage. Nottice that report ID 0 is a valid report.
+        """
         for report_id, report_obj in self.__input_report_templates.items():
             if full_usage_id in report_obj:
                 return report_id
@@ -1150,16 +1157,16 @@ class HidReport(object):
                     report_item = ReportItem(self, item)
                     self.__items[report_item.key()] = report_item
                     self.__idx_items[report_item.data_index] = report_item
+                    #item is value array?
+                    if report_item.is_value_array():
+                        self.__value_array_items.append(report_item)
                 else:
                     for usage_id in range(item.usage_min, 
                             item.usage_max):
                         report_item =  ReportItem(self, item, usage_id)
                         self.__items[report_item.key()] = report_item
                         self.__idx_items[report_item.data_index] = report_item
-                #item is value array?
-                if isinstance(item, HIDP_VALUE_CAPS) and \
-                        item.report_count > 1:
-                    self.__value_array_items.append(report_item)
+
             #
         #
     __report_kind_dict = {
