@@ -119,16 +119,3 @@ class HidPnPWindowMixin(WndProcHookMixin):
         "'Virtual' like function to refresh update for connection status"
         print "HID:", new_status
 
-# a simple example
-if __name__ == "__main__":
-    import wx
-    class MyFrame(wx.Frame,HidPnPWindowMixin):
-        def __init__(self,parent):
-            frame_size = wx.Size(640,480)
-            wx.Frame.__init__(self,parent,-1,"Change my size and watch stdout",size=frame_size)
-            HidPnPWindowMixin.__init__(self, self.GetHandle())
-        
-    app = wx.App(False)
-    frame = MyFrame(None)
-    frame.Show()
-    app.MainLoop()
