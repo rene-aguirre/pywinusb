@@ -7,7 +7,7 @@ from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD
 from helpers import HIDError
 
 def os_supports_unicode():
-    return False
+    return True
     
 #dll references
 setup_api         = ctypes.windll.setupapi
@@ -25,21 +25,23 @@ WaitForSingleObject = kernel32.WaitForSingleObject
 
 #os dependant functions and definitions
 if not os_supports_unicode():
-    c_tchar = c_char
+    c_tchar                         = c_char
     SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailA
     SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdA
-    SetupDiGetClassDevs = setup_api.SetupDiGetClassDevsA
-    CM_Get_Device_ID    = setup_api.CM_Get_Device_IDA
-    CreateFile          = kernel32.CreateFileA
-    CreateEvent         = kernel32.CreateEventA
+    SetupDiGetClassDevs             = setup_api.SetupDiGetClassDevsA
+    CM_Get_Device_ID                = setup_api.CM_Get_Device_IDA
+    CreateFile                      = kernel32.CreateFileA
+    CreateEvent                     = kernel32.CreateEventA
+    string_at                       = ctypes.string_at
 else:
-    c_tchar = c_wchar
+    c_tchar                         = c_wchar
     SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailW
-    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdA
-    SetupDiGetClassDevs = setup_api.SetupDiGetClassDevsW
-    CM_Get_Device_ID    = setup_api.CM_Get_Device_IDW
-    CreateFile          = kernel32.CreateFileW
-    CreateEvent         = kernel32.CreateEventW
+    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdW
+    SetupDiGetClassDevs             = setup_api.SetupDiGetClassDevsW
+    CM_Get_Device_ID                = setup_api.CM_Get_Device_IDW
+    CreateFile                      = kernel32.CreateFileW
+    CreateEvent                     = kernel32.CreateEventW
+    string_at                       = ctypes.wstring_at
 
 b_verbose = True
 usb_verbose = False
@@ -61,21 +63,23 @@ class OVERLAPPED(Structure):
     ]
     
 #**************
-# SetupApi.dll
+# SetupApi.dll, it likes pack'ed = 1 structures
 class SP_DEVICE_INTERFACE_DATA(Structure):
+    _pack_ = 1
     _fields_ = [("cb_size", c_ulong),
         ("interface_class_guid", GUID),
         ("flags", c_ulong),
         ("reserved", POINTER(ULONG))
     ]
 
-MAX_SP_DEV_INTERF_DETAIL_SIZE = 512
 class SP_DEVICE_INTERFACE_DETAIL_DATA(Structure):
+    _pack_ = 1
     _fields_ = [("cb_size", DWORD),
-        ("device_path", c_tchar * MAX_SP_DEV_INTERF_DETAIL_SIZE)
+        ("device_path", c_tchar * 1) # device_path[1]
     ]
 
 class SP_DEVINFO_DATA(Structure):
+    _pack_ = 1
     _fields_ = [("cb_size", DWORD),
         ("class_guid", GUID),
         ("dev_inst", DWORD),

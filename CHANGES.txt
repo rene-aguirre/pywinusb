@@ -1,6 +1,10 @@
 -------------------------
 Release changes
 -------------------------
+0.2.9,
+ * Fixed broken value array usages transactions
+ * Better Setup API device paths handling
+
 0.2.8,
  * Fixed broken value array usages transactions
 

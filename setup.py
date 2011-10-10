@@ -8,7 +8,7 @@ except ImportError:
             "As an alternative copy the ./pywinusb sub-folder content to your " \
             "Python packages path (i.e. C:\Python26\Lib\site\packages\)"
     sys.exit(1)
-VERSION = '0.2.8'
+VERSION = '0.2.9'
 README = os.path.join(os.path.dirname(__file__), 'README.txt')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.txt')
 long_description = open(README).read() + open(CHANGES).read() + 'nn'

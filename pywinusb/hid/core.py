@@ -5,7 +5,6 @@
 This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
-import sys
 import ctypes
 import _winreg
 import threading
@@ -60,8 +59,7 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
         device_interface.cb_size = sizeof(device_interface)
 
         dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) - \
-            (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
+        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data)
 
         dev_index = 0
         required_size = c_ulong()
@@ -73,9 +71,10 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
             required_size.value = 0
             SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
                 None, 0, byref(required_size), None)
+
             if required_size.value > sizeof(dev_inter_detail_data):
-                sys.stderr.write("Error getting HID device info.\n")
-                continue
+                # allow more memory
+                ctypes.resize( dev_inter_detail_data, required_size.value)
 
             # it's OK to get the details
             SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
@@ -132,32 +131,33 @@ def find_all_hid_devices():
         dev_interface_data.cb_size = sizeof(dev_interface_data)
 
         dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) - \
-                (sizeof(c_tchar)*(MAX_SP_DEV_INTERF_DETAIL_SIZE-1))
+        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) 
 
         dev_info_data = SP_DEVINFO_DATA()
         dev_info_data.cb_size = sizeof(dev_info_data)
 
-        i = 0
+        device_index = 0
         required_size = c_ulong()
         parent_device = c_ulong()
         results = []
         while setup_api.SetupDiEnumDeviceInterfaces(h_info, None, 
-                byref(hid_guid), i, byref(dev_interface_data) ):
-            i += 1
+                byref(hid_guid), device_index, 
+                byref(dev_interface_data) ):
 
-            # validate if hid path would fit
+            # get actual storage requirement
             required_size.value = 0
             SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
                     None, 0, byref(required_size), None)
-            if required_size.value > sizeof(dev_inter_detail_data):
-                sys.stderr.write("Error getting HID device info.\n")
-                continue
+
+            if required_size.value > dev_inter_detail_data.cb_size:
+                # allow more memory, .cb_size should remain
+                ctypes.resize( dev_inter_detail_data, required_size.value)
 
             # it's OK to get the details
             SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
                     byref(dev_inter_detail_data), required_size, None, 
                     byref(dev_info_data))
+            device_path = string_at(byref(dev_inter_detail_data, sizeof(DWORD)))
 
             #get parent instance id (so we can discriminate on port)
             if setup_api.CM_Get_Parent(byref(parent_device), 
@@ -168,22 +168,24 @@ def find_all_hid_devices():
             required_size.value = 0
             SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), None, 
                 0, byref(required_size) )
+
             if required_size.value > 0:
                 device_instance_id_type = c_tchar * required_size.value
                 device_instance_id = device_instance_id_type()
                 SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), 
                         byref(device_instance_id), required_size, 
                         byref(required_size) )
-                hid_device = HidDevice(dev_inter_detail_data.device_path, 
+                hid_device = HidDevice(device_path, 
                         parent_device.value, device_instance_id.value )
                 del device_instance_id
                 del device_instance_id_type
             else:
-                hid_device = HidDevice(dev_inter_detail_data.device_path, 
-                        parent_device.value )
+                hid_device = HidDevice(device_path, parent_device.value )
+
             # add device to results
             if hid_device.vendor_id: #this means device it's not protected
                 results.append(hid_device)
+            device_index += 1
         # start collecting
         del dev_info_data
         del dev_inter_detail_data
@@ -512,6 +514,16 @@ class HidDevice(HidDeviceBaseClass):
             self.__reading_thread = HidDevice.InputReportReaderThread( \
                 self, hid_caps.input_report_byte_length)
         # clean up
+
+    def get_physical_descriptor(self):
+        """Returns physical HID device descriptor
+        """
+        raw_data_type = c_ubyte * 1024
+        raw_data = raw_data_type()
+        if hid_dll.HidD_GetPhysicalDescriptor(self.hid_handle, 
+            byref(raw_data), 1024 ):
+            return [x for x in raw_data]
+        return []
 
     def send_output_report(self, data):
         """Send input/output/feature report ID = report_id, data should be a 
