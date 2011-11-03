@@ -72,7 +72,7 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
             SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
                 None, 0, byref(required_size), None)
 
-            if required_size.value > sizeof(dev_inter_detail_data):
+            if required_size.value > dev_inter_detail_data.cb_size:
                 # allow more memory
                 ctypes.resize( dev_inter_detail_data, required_size.value)
 
@@ -80,7 +80,8 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
             SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
                     byref(dev_inter_detail_data), required_size, None, None)
 
-            if dev_inter_detail_data.device_path == device_path:
+            test_device_path = string_at(byref(dev_inter_detail_data, sizeof(DWORD)))
+            if test_device_path == device_path:
                 return True
     finally:
         # clean up

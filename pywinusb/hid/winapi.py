@@ -5,6 +5,12 @@ from ctypes import byref, POINTER
 from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD
 #from core import HIDError
 from helpers import HIDError
+import platform
+
+if platform.architecture()[0].startswith('64'):
+    WIN_PACK = 8
+else:
+    WIN_PACK = 1
 
 def os_supports_unicode():
     return True
@@ -65,7 +71,7 @@ class OVERLAPPED(Structure):
 #**************
 # SetupApi.dll, it likes pack'ed = 1 structures
 class SP_DEVICE_INTERFACE_DATA(Structure):
-    _pack_ = 1
+    _pack_ = WIN_PACK
     _fields_ = [("cb_size", c_ulong),
         ("interface_class_guid", GUID),
         ("flags", c_ulong),
@@ -73,13 +79,13 @@ class SP_DEVICE_INTERFACE_DATA(Structure):
     ]
 
 class SP_DEVICE_INTERFACE_DETAIL_DATA(Structure):
-    _pack_ = 1
+    _pack_ = WIN_PACK
     _fields_ = [("cb_size", DWORD),
         ("device_path", c_tchar * 1) # device_path[1]
     ]
 
 class SP_DEVINFO_DATA(Structure):
-    _pack_ = 1
+    _pack_ = WIN_PACK
     _fields_ = [("cb_size", DWORD),
         ("class_guid", GUID),
         ("dev_inst", DWORD),
