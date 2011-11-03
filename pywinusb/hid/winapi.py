@@ -1,8 +1,10 @@
-#
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import ctypes
-from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort, c_wchar
+from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort, c_wchar, c_void_p
 from ctypes import byref, POINTER
-from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD
+from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE
 #from core import HIDError
 from helpers import HIDError
 import platform
@@ -60,12 +62,20 @@ class GUID(Structure):
                 ("data4", BYTE * 8)]
 
 class OVERLAPPED(Structure):
+    class OFFSET_OR_HANDLE(Union):
+        class OFFSET(Structure):
+            _fields_ = [
+                ("offset",      DWORD),
+                ("offset_high", DWORD) ]
+
+        _fields_ = [
+                ("offset",      OFFSET),
+                ("pointer",     c_void_p) ]
     _fields_ = [
-        ("internal", c_ulong),
-        ("internal_high", c_ulong),
-        ("offset", c_ulong),
-        ("offset_high", c_ulong),
-        ("h_event", c_ulong)
+        ("internal",        POINTER(ULONG)),
+        ("internal_high",   POINTER(ULONG)),
+        ("u",               OFFSET_OR_HANDLE),
+        ("h_event",         HANDLE)
     ]
     
 #**************
