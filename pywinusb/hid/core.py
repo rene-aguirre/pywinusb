@@ -13,8 +13,8 @@ import time
 from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof
 
 #local modules
-from winapi import *
 from helpers import HIDError, synchronized, ReadOnlyList
+from winapi import *
 
 if not hasattr(threading.Thread, "is_alive"):
     # in python <2.6 is_alive was called isAlive
@@ -34,17 +34,21 @@ USAGE_EVENTS = [
 ] = range(7)
 
 def get_full_usage_id(page_id, usage_id):
+    """Convert to composite 32 bit page and usage ids"""
     return (page_id << 16) | usage_id
 
 def get_usage_page_id(full_usage_id):
+    """Extract 16 bits page id from full usage id (32 bits)"""
     return (full_usage_id >> 16) & 0xffff
 
 def get_short_usage_id(full_usage_id):
+    """Extract 16 bits usage id from full usage id (32 bits)"""
     return full_usage_id & 0xffff
 
 def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
-    """Test if required device_path is still valid (HID device connected 
-    to host)"""
+    """Test if required device_path is still valid 
+    (HID device connected to host)
+    """
     # get HID device class guid
 
     # handle to an opaque device information set
@@ -80,7 +84,8 @@ def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
             SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
                     byref(dev_inter_detail_data), required_size, None, None)
 
-            test_device_path = string_at(byref(dev_inter_detail_data, sizeof(DWORD)))
+            test_device_path = string_at(byref(dev_inter_detail_data, 
+                sizeof(DWORD)))
             if test_device_path == device_path:
                 return True
     finally:
@@ -95,8 +100,8 @@ def find_all_hid_devices():
     "Finds all HID devices connected to the system"
     #
     # From DDK documentation (finding and Opening HID collection):
-    # After a user-mode application is loaded, it does the following sequence of 
-    # operations:
+    # After a user-mode application is loaded, it does the following sequence
+    # of operations:
     #
     #   * Calls HidD_GetHidGuid to obtain the system-defined GUID for HIDClass 
     #     devices.
@@ -204,9 +209,15 @@ class HidDeviceFilter(object):
     the system, it also allows to search for specific devices  (by filtering)
     """
     def __init__(self, *args, **kwrds):
+        """Initialize filter from a named target parameters.
+        I.e. product_id=0x0123
+        """
         self.filter_params = kwrds
 
     def get_devices_by_parent(self, hid_filter=None):
+        """Group devices returned from filter query in order \
+        by devcice parent id.
+        """
         all_devs = self.get_devices(hid_filter)
         dev_group = dict()
         for hid_device in all_devs:
@@ -249,7 +260,7 @@ class HidDeviceFilter(object):
             elif item +"_mask" in self.filter_params or item + "_includes" \
                     in self.filter_params:
                 continue # value mask or string search is being queried
-            elif item not in HidDevice._filter_attributes_:
+            elif item not in HidDevice.get_filter_attribs():
                 continue # field does not exist sys.error.write(...)
             #start filtering out
             for device in results.keys():
@@ -283,6 +294,7 @@ class HidDeviceBaseClass(object):
         pass
 
 class HidDevice(HidDeviceBaseClass):
+    """This class is the main interface to physical HID devices"""
     MAX_MANUFACTURER_STRING_LEN = 128 #it's actually 126 + 1 (null)
     MAX_PRODUCT_STRING_LEN      = 128 #it's actually 126 + 1 (null)
     MAX_SERIAL_NUMBER_LEN       = 64
@@ -290,10 +302,16 @@ class HidDevice(HidDeviceBaseClass):
     _filter_attributes_ = ["vendor_id", "product_id", "version_number", 
         "product_name", "vendor_name"]
 
+    def get_filter_attribs(self):
+        """Acces to default flter (device polling) paramenters names"""
+        return self._filter_attributes_
+
     def get_parent_instance_id(self):
+        """Retreive system instance id (numerical value)"""
         return self.parent_instance_id
 
     def get_parent_device(self):
+        """Retreive parent device string id"""
         if not self.parent_instance_id:
             return ""
         dev_buffer_type = c_tchar * MAX_DEVICE_ID_LEN
@@ -401,6 +419,7 @@ class HidDevice(HidDeviceBaseClass):
             CloseHandle(h_hid)
 
     def is_active(self):
+        """Poll if device is still valid"""
         if not self.vendor_id:
             return False
         return True
@@ -434,7 +453,8 @@ class HidDevice(HidDeviceBaseClass):
         
         #get top level capabilities
         hid_caps_struct = HIDP_CAPS()
-        HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, byref(hid_caps_struct)) )
+        HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, 
+            byref(hid_caps_struct)) )
         self.hid_caps = hid_caps = HidPCaps(hid_caps_struct)
         del hid_caps_struct
         
@@ -622,7 +642,7 @@ class HidDevice(HidDeviceBaseClass):
             self.ptr_preparsed_data = None
             hid_dll.HidD_FreePreparsedData(ptr_preparsed_data)
 
-        # wait for the reading thread to complete before closing the device handle
+        # wait for the reading thread to complete before closing device handle
         while self.__reading_thread and self.__reading_thread.is_active():
             time.sleep(0.050) # 50 ms latency, just to avoid CPU consumption
 
@@ -733,20 +753,20 @@ class HidDevice(HidDeviceBaseClass):
         new_values = report_template.get_usages()
         # now diff
         event_applies = self.evt_decision
-        for key in new_values:
-            if key in self.__evt_handlers:
-                #check if event handler exist!
-                for event_kind, handlers in self.__evt_handlers[key].items():
-                    #key=event_kind, values=handler set
-                    new_value = new_values[key]
-                    if event_applies[event_kind](old_values[key], new_value):
-                        #decision applies, call handlers
-                        for function_handler in handlers:
-                            #check if the application wants some particular parameter
-                            if handlers[function_handler]:
-                                function_handler(new_value, event_kind, handlers[function_handler])
-                            else:
-                                function_handler(new_value, event_kind)
+        for key in new_values and key in self.__evt_handlers:
+            #check if event handler exist!
+            for event_kind, handlers in self.__evt_handlers[key].items():
+                #key=event_kind, values=handler set
+                new_value = new_values[key]
+                if not event_applies[event_kind](old_values[key], new_value):
+                    continue
+                #decision applies, call handlers
+                for function_handler in handlers:
+                    #check if the application wants some particular parameter
+                    if handlers[function_handler]:
+                        function_handler(new_value, event_kind, handlers[function_handler])
+                    else:
+                        function_handler(new_value, event_kind)
 
     def set_raw_data_handler(self, funct):
         "Set external raw data handler, set to None to restore default"
@@ -897,7 +917,8 @@ class HidDevice(HidDeviceBaseClass):
             hid_handle = int( hid_object.hid_handle )
             self.raw_report_size = raw_report_size
             self.__overlapped_read_obj = None
-            if hid_object and hid_handle and self.raw_report_size and self.report_queue:
+            if hid_object and hid_handle and self.raw_report_size \
+                    and self.report_queue:
                 #only if input reports are available
                 self.start()
             else:
@@ -949,7 +970,8 @@ class HidDevice(HidDeviceBaseClass):
                     byref(over_read) )
                 if not result:
                     error = ctypes.GetLastError()
-                    if error == ERROR_IO_PENDING: #overlapped operation in progress
+                    if error == ERROR_IO_PENDING:
+                        # overlapped operation in progress
                         result = error
                     elif error == 1167:
                         # device disconnected
@@ -1047,7 +1069,8 @@ class ReportItem(object):
         if index < self.__report_count:
             byte_index = (index * self.__bit_size) / 8
             bit_index = (index * self.__bit_size) % 8
-            return ((self.__value[byte_index] >> bit_index) & ((1 << self.__bit_size) - 1) )
+            return ((self.__value[byte_index] >> bit_index) & \
+                    ((1 << self.__bit_size) - 1) )
         else:
             raise IndexError
 
@@ -1103,7 +1126,8 @@ class ReportItem(object):
             usage_string_type = c_wchar * MAX_HID_STRING_LENGTH 
             # 128 max string length
             abuffer = usage_string_type()
-            hid_dll.HidD_GetIndexedString(self.hid_report.get_hid_object().hid_handle, 
+            hid_dll.HidD_GetIndexedString(
+                self.hid_report.get_hid_object().hid_handle, 
                 self.string_index,
                 byref(abuffer), MAX_HID_STRING_LENGTH-1 )
             return abuffer.value
@@ -1145,13 +1169,13 @@ class HidReport(object):
     """
     #
     def __init__(self, hid_object, report_type, report_id):
+        hid_caps = hid_object.hid_caps
         if report_type == HidP_Input:
-            self.__raw_report_size = hid_object.hid_caps.input_report_byte_length
+            self.__raw_report_size = hid_caps.input_report_byte_length
         elif report_type == HidP_Output:
-            self.__raw_report_size = hid_object.hid_caps.output_report_byte_length
+            self.__raw_report_size = hid_caps.output_report_byte_length
         elif report_type == HidP_Feature:
-            self.__raw_report_size = \
-                hid_object.hid_caps.feature_report_byte_length
+            self.__raw_report_size = hid_caps.feature_report_byte_length
         else:
             raise HIDError("Unsupported report type")
         self.__report_kind = report_type  #target report type
