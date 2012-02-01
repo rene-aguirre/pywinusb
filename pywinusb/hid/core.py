@@ -11,10 +11,24 @@ import threading
 import time
 
 from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof
+from ctypes.wintypes import DWORD
 
 #local modules
 from helpers import HIDError, synchronized, ReadOnlyList
-from winapi import *
+
+from winapi import GetHidGuid, SetupDiGetClassDevs, DIGCF_PRESENT, \
+    DIGCF_DEVICEINTERFACE, \
+    SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA,  \
+    SP_DEVINFO_DATA, SetupDiGetDeviceInterfaceDetail, setup_api, \
+    hid_dll, HidP_Input, HidP_Output, HidP_Feature, string_at, \
+    SetupDiGetDeviceInstanceId, c_tchar, CM_Get_Device_ID, \
+    CreateFile, GENERIC_READ, GENERIC_WRITE, FILE_SHARE_READ, \
+    OVERLAPPED, WriteFile, CreateEvent, WaitForSingleObject, \
+    FILE_SHARE_WRITE, OPEN_EXISTING, HIDD_ATTRIBUTES, CloseHandle, \
+    HIDP_CAPS, HidStatus, HIDP_BUTTON_CAPS, FILE_ATTRIBUTE_NORMAL, \
+    FILE_FLAG_OVERLAPPED, HIDP_VALUE_CAPS, WAIT_OBJECT_0, \
+    SetEvent, ReadFile, ERROR_IO_PENDING, INFINITE, CancelIo, \
+    HIDP_DATA
 
 if not hasattr(threading.Thread, "is_alive"):
     # in python <2.6 is_alive was called isAlive
@@ -260,7 +274,7 @@ class HidDeviceFilter(object):
             elif item +"_mask" in self.filter_params or item + "_includes" \
                     in self.filter_params:
                 continue # value mask or string search is being queried
-            elif item not in HidDevice.get_filter_attribs():
+            elif item not in HidDevice._filter_attributes_:
                 continue # field does not exist sys.error.write(...)
             #start filtering out
             for device in results.keys():
@@ -301,10 +315,6 @@ class HidDevice(HidDeviceBaseClass):
     
     _filter_attributes_ = ["vendor_id", "product_id", "version_number", 
         "product_name", "vendor_name"]
-
-    def get_filter_attribs(self):
-        """Acces to default flter (device polling) paramenters names"""
-        return self._filter_attributes_
 
     def get_parent_instance_id(self):
         """Retreive system instance id (numerical value)"""
@@ -489,7 +499,8 @@ class HidDevice(HidDeviceBaseClass):
         ]
 
         for report_kind, struct_kind, max_items, get_control_caps in all_items:
-            if not int(max_items): continue #nothing here
+            if not int(max_items):
+                continue #nothing here
             #create storage for control/data
             ctrl_array_type = struct_kind * max_items
             ctrl_array_struct = ctrl_array_type()
