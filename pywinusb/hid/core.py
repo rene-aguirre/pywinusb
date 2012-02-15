@@ -30,6 +30,8 @@ from winapi import GetHidGuid, SetupDiGetClassDevs, DIGCF_PRESENT, \
     SetEvent, ReadFile, ERROR_IO_PENDING, INFINITE, CancelIo, \
     HIDP_DATA
 
+MAX_HID_STRING_LENGTH = 128
+
 if not hasattr(threading.Thread, "is_alive"):
     # in python <2.6 is_alive was called isAlive
     threading.Thread.is_alive = threading.Thread.isAlive
@@ -222,7 +224,7 @@ class HidDeviceFilter(object):
     """This class allows searching for HID devices currently connected to 
     the system, it also allows to search for specific devices  (by filtering)
     """
-    def __init__(self, *args, **kwrds):
+    def __init__(self, **kwrds):
         """Initialize filter from a named target parameters.
         I.e. product_id=0x0123
         """
@@ -274,7 +276,7 @@ class HidDeviceFilter(object):
             elif item +"_mask" in self.filter_params or item + "_includes" \
                     in self.filter_params:
                 continue # value mask or string search is being queried
-            elif item not in HidDevice._filter_attributes_:
+            elif item not in HidDevice.filter_attributes:
                 continue # field does not exist sys.error.write(...)
             #start filtering out
             for device in results.keys():
@@ -313,7 +315,7 @@ class HidDevice(HidDeviceBaseClass):
     MAX_PRODUCT_STRING_LEN      = 128 #it's actually 126 + 1 (null)
     MAX_SERIAL_NUMBER_LEN       = 64
     
-    _filter_attributes_ = ["vendor_id", "product_id", "version_number", 
+    filter_attributes = ["vendor_id", "product_id", "version_number", 
         "product_name", "vendor_name"]
 
     def get_parent_instance_id(self):
@@ -339,17 +341,30 @@ class HidDevice(HidDeviceBaseClass):
         "Interface for HID device as referenced by device_path parameter"
         #allow safe access (and object browsing)
         self.__open_status = False
-        self.__reset_vars() #initialize hardware related vars
-        self.set_raw_data_handler(None)
-        self.device_path = device_path
-        self.instance_id = instance_id
+        self.__input_report_templates = dict()
+
+        #initialize hardware related vars
+        self.__button_caps_storage     = list()
+        self.report_set                = dict()
+        self.__evt_handlers            = dict()
+        self.__reading_thread          = None
+        self.__input_processing_thread = None
+        self.__raw_handler             = None
+        self._input_report_queue       = None
+        self.hid_caps                  = None
+        self.ptr_preparsed_data        = None
+        self.hid_handle                = None
+        self.usages_storage            = dict()
+
+        self.device_path        = device_path
+        self.instance_id        = instance_id
         self.parent_instance_id = parent_instance_id
-        self.product_name = ""
-        self.vendor_name = ""
-        self.serial_number = ""
-        self.vendor_id  = 0
-        self.product_id = 0
-        self.version_number = 0
+        self.product_name       = ""
+        self.vendor_name        = ""
+        self.serial_number      = ""
+        self.vendor_id          = 0
+        self.product_id         = 0
+        self.version_number     = 0
         HidDeviceBaseClass.__init__(self)
         
         # HID device handle first
@@ -462,38 +477,36 @@ class HidDevice(HidDeviceBaseClass):
         self.hid_handle = hid_handle
         
         #get top level capabilities
-        hid_caps_struct = HIDP_CAPS()
+        self.hid_caps = HIDP_CAPS()
         HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, 
-            byref(hid_caps_struct)) )
-        self.hid_caps = hid_caps = HidPCaps(hid_caps_struct)
-        del hid_caps_struct
+            byref(self.hid_caps)) )
         
         #proceed with button capabilities
         caps_length = c_ulong()
 
         all_items = [\
             (HidP_Input,   HIDP_BUTTON_CAPS, 
-                hid_caps.number_input_button_caps,    
+                self.hid_caps.number_input_button_caps,    
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Input,   HIDP_VALUE_CAPS,  
-                hid_caps.number_input_value_caps,     
+                self.hid_caps.number_input_value_caps,     
                 hid_dll.HidP_GetValueCaps
             ),
             (HidP_Output,  HIDP_BUTTON_CAPS, 
-                hid_caps.number_output_button_caps,   
+                self.hid_caps.number_output_button_caps,   
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Output,  HIDP_VALUE_CAPS,  
-                hid_caps.number_output_value_caps,    
+                self.hid_caps.number_output_value_caps,    
                 hid_dll.HidP_GetValueCaps
             ),
             (HidP_Feature, HIDP_BUTTON_CAPS, 
-                hid_caps.number_feature_button_caps,  
+                self.hid_caps.number_feature_button_caps,  
                 hid_dll.HidP_GetButtonCaps
             ),
             (HidP_Feature, HIDP_VALUE_CAPS, 
-                hid_caps.number_feature_value_caps,
+                self.hid_caps.number_feature_value_caps,
                 hid_dll.HidP_GetValueCaps
             ),
         ]
@@ -532,7 +545,7 @@ class HidDevice(HidDeviceBaseClass):
 
         #now prepare the input report handler
         self.__input_report_templates = dict()
-        if not output_only and hid_caps.input_report_byte_length and \
+        if not output_only and self.hid_caps.input_report_byte_length and \
                 HidP_Input in self.report_set:
             #first make templates for easy parsing input reports
             for report_id in self.report_set[HidP_Input]:
@@ -540,11 +553,11 @@ class HidDevice(HidDeviceBaseClass):
                         HidReport( self, HidP_Input, report_id )
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
-                self.max_input_queue_size, hid_caps.input_report_byte_length)
+                self.max_input_queue_size, self.hid_caps.input_report_byte_length)
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
             self.__reading_thread = HidDevice.InputReportReaderThread( \
-                self, hid_caps.input_report_byte_length)
+                self, self.hid_caps.input_report_byte_length)
         # clean up
 
     def get_physical_descriptor(self):
@@ -608,12 +621,13 @@ class HidDevice(HidDeviceBaseClass):
                 len(raw_data))
 
     def __reset_vars(self):
-        #reset vars (for init or gc)
+        """Reset vars (for init or gc)"""
         self.__button_caps_storage = list()
         self.usages_storage = dict()
         self.report_set = dict()
         self.ptr_preparsed_data = None
         self.hid_handle = None
+
         #don't clean up the report queue because the
         #consumer & producer threads might needed it
         self.__evt_handlers = dict()
@@ -624,12 +638,15 @@ class HidDevice(HidDeviceBaseClass):
         #
         
     def is_plugged(self):
+        """Check if device still plugged to USB host"""
         return self.device_path and hid_device_path_exists(self.device_path)
 
     def is_opened(self):
+        """Check if device path resource open status"""
         return self.__open_status
 
     def close(self):
+        """Release system resources"""
         # free parsed data
         if not self.is_opened():
             return
@@ -693,6 +710,7 @@ class HidDevice(HidDeviceBaseClass):
         return results
 
     def count_all_feature_reports(self):
+        """Retreive total number of available feature reports"""
         return self.hid_caps.number_feature_button_caps + \
             self.hid_caps.number_feature_value_caps
 
@@ -821,6 +839,7 @@ class HidDevice(HidDeviceBaseClass):
         return True
 
     class InputReportQueue(object):
+        """Multi-threaded queue. Allows to queue reports from reading thread"""
         def __init__(self, max_size, report_size):
             self.__locked_down = False
             self.max_size = max_size
@@ -863,6 +882,7 @@ class HidDevice(HidDeviceBaseClass):
 
         #@logging_decorator
         def post(self, raw_report):
+            """Used by reading thread to post a new input report."""
             if self.__locked_down:
                 self.posted_event.set()
                 return
@@ -873,6 +893,7 @@ class HidDevice(HidDeviceBaseClass):
 
         #@logging_decorator
         def get(self):
+            """Used to retreive one report form the queue"""
             if self.__locked_down:
                 return None
             
@@ -892,6 +913,7 @@ class HidDevice(HidDeviceBaseClass):
             return item
 
         def release_events(self):
+            """Release thread locks."""
             self.__locked_down = True
             self.posted_event.set()
 
@@ -904,9 +926,12 @@ class HidDevice(HidDeviceBaseClass):
             self.start()
 
         def abort(self):
+            """Cancel processing."""
             self.__abort = True
 
         def run(self):
+            """Start collecting input reports and post it to subscribed
+            Hid device"""
             hid_object = self.hid_object
             report_queue = hid_object._input_report_queue
             while not self.__abort and hid_object.is_opened():
@@ -936,6 +961,7 @@ class HidDevice(HidDeviceBaseClass):
                 hid_object.close()
 
         def abort(self):
+            """Stop collectiong reports."""
             if not self.__active:
                 return
             self.__abort = True
@@ -990,7 +1016,6 @@ class HidDevice(HidDeviceBaseClass):
                     else:
                         raise HIDError("Error %d when trying to read from HID "\
                             "device: %s"%(error, ctypes.FormatError(error)) )
-                        break
                 if result == ERROR_IO_PENDING:
                     #wait for event
                     if self.__abort:
@@ -1018,6 +1043,7 @@ class HidDevice(HidDeviceBaseClass):
             self.vendor_name, self.product_name, self.device_path)
 
 class ReportItem(object):
+    """Represents a single usage field in a report."""
     def __init__(self, hid_report, caps_record, usage_id = 0):
         # from here we can get the parent hid_object
         self.hid_report = hid_report
@@ -1086,6 +1112,7 @@ class ReportItem(object):
             raise IndexError
 
     def set_value(self, value):
+        """Set usage value within report"""
         if self.__is_value_array:
             if len(value) == self.__report_count:
                 for index, item in enumerate(value):
@@ -1097,6 +1124,7 @@ class ReportItem(object):
             self.__value = value & ((1 << self.__bit_size) - 1) #valid bits only
 
     def get_value(self):
+        """Retreive usage value within report"""
         if self.__is_value_array:
             if self.__bit_size == 8: #matching c_ubyte
                 return list(self.__value)
@@ -1112,6 +1140,7 @@ class ReportItem(object):
 
     @property
     def value_array(self):
+        """Retreive usage value as value array"""
         #read only property
         return self.__value
 
@@ -1120,12 +1149,15 @@ class ReportItem(object):
         return (self.page_id << 16) | self.usage_id
 
     def is_value(self):
+        """Validate if usage is value (not 'button')"""
         return self.__is_value
 
     def is_button(self):
+        """Validate if usage is button (not value)"""
         return self.__is_button
 
     def is_value_array(self):
+        """Validate if usage was described as value array"""
         return self.__is_value_array
 
     def get_usage_string(self):
@@ -1133,7 +1165,6 @@ class ReportItem(object):
         if available)
         """
         if self.string_index:
-            MAX_HID_STRING_LENGTH = 128
             usage_string_type = c_wchar * MAX_HID_STRING_LENGTH 
             # 128 max string length
             abuffer = usage_string_type()
@@ -1147,6 +1178,7 @@ class ReportItem(object):
     #read only properties
     @property
     def report_id(self):
+        """Retreive Report Id numeric value"""
         return self.__report_id_value
 
     def __repr__(self):
@@ -1225,14 +1257,17 @@ class HidReport(object):
     #read only properties
     @property
     def report_id(self):
+        """Retreive asociated report Id value"""
         return self.__report_id.value
 
     @property
     def report_type(self):
+        """Retreive report type as numeric value (input, output, feature)"""
         return self.__report_kind_dict[self.__report_kind]
 
     @property
     def hid_object(self):
+        """Retreive asociated HID device instance"""
         return self.__hid_object
 
     def __repr__(self):
@@ -1258,18 +1293,23 @@ class HidReport(object):
         return len(self.__items)
 
     def has_key(self, key):
+        """Test for key (as standard dicts)"""
         return self.__contains__(key)
 
     def items(self):
+        """Return key, value pairs (as standard dicts)"""
         return self.__items.items()
 
     def keys(self):
+        """Return stored element keys (as standard dicts)"""
         return self.__items.keys()
 
     def values(self):
+        """Return stored elements (as standard dicts)"""
         return self.__items.values()
 
     def get_hid_object(self):
+        """Retreive reference to parent HID device"""
         return self.__hid_object
 
     def get_usages(self):
@@ -1280,6 +1320,7 @@ class HidReport(object):
         return result
 
     def __alloc_raw_data(self, initial_values=None):
+        """Pre-allocate re-usagle memory"""
         #allocate c_ubyte storage
         if self.__raw_data == None: #first time only, create storage
             raw_data_type = c_ubyte * self.__raw_report_size
@@ -1506,25 +1547,28 @@ class HidReport(object):
         return ReadOnlyList([])
     #class HIDReport finishes ***********************
 
-class HidPCaps(object):
-    def __init__(self, hidp_caps):
-        for fname, ftype in hidp_caps._fields_:
-            if fname == 'reserved': continue
-            setattr(self, fname, int(getattr(hidp_caps, fname)))
-
 class HidPUsageCaps(object):
+    """Allow to keep usage parameters (regarless of windows type)
+    in a common class."""
     def __init__(self, caps):
+        # keep pylint happy
+        self.report_id = 0
+
         for fname, ftype in caps._fields_:
-            if fname.startswith('reserved'): continue
-            if fname == 'union': continue
+            if fname.startswith('reserved'):
+                continue
+            if fname == 'union':
+                continue
             setattr(self, fname, int(getattr(caps, fname)))
         if caps.is_range:
             range_struct = caps.union.range
         else:
             range_struct = caps.union.not_range
         for fname, ftype in range_struct._fields_:
-            if fname.startswith('reserved'): continue
-            if fname == 'union': continue
+            if fname.startswith('reserved'):
+                continue
+            if fname == 'union':
+                continue
             setattr(self, fname, int(getattr(range_struct, fname)))
         self.is_value  = False
         self.is_button = False
@@ -1536,16 +1580,18 @@ class HidPUsageCaps(object):
             pass
 
     def inspect(self):
+        """Retreive formatted '\\tField: Value\\n' attributes"""
         results = []
         for fname in dir(self):
             if not fname.startswith('_'):
                 value = getattr(self, fname)
-                if callable(value): continue
+                if callable(value):
+                    continue
                 results.append("    %s: %s\n" % (fname, value))
         return "".join( results )
 
 def simple_test():
-    # simple test
+    """Check all HID devices conected to PC hosts."""
     # first be kind with local encodings
     import codecs, sys
     sys.stdout = codecs.getwriter('mbcs')(sys.stdout)
