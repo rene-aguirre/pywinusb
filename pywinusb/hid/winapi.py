@@ -2,60 +2,70 @@
 # -*- coding: utf-8 -*-
 
 import ctypes
-from ctypes import Structure, Union, c_ubyte, c_char, c_long, c_ulong, c_ushort, c_wchar, c_void_p
-from ctypes import byref, POINTER
-from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE
+from ctypes import Structure, Union, c_ubyte, c_long, c_ulong, c_ushort, \
+        c_wchar, c_void_p, c_uint
+from ctypes import byref, POINTER, sizeof
+from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE, BOOL, \
+        WCHAR, LPWSTR, LPCWSTR, LPVOID
 #from core import HIDError
 from helpers import HIDError
 import platform
+
+UCHAR = c_ubyte
+ENUM  = c_uint
+TCHAR = WCHAR
 
 if platform.architecture()[0].startswith('64'):
     WIN_PACK = 8
 else:
     WIN_PACK = 1
 
-def os_supports_unicode():
-    return True
-    
+class WinApiException(Exception):
+    "Rough Windows API exception type"
+    pass
+
+def winapi_result( result ):
+    """Validate WINAPI BOOL result, raise exception if failed"""
+    if not result:
+        raise WinApiException(u"%d (%x): %s" % (ctypes.GetLastError(), 
+                ctypes.GetLastError(), ctypes.FormatError()))
+    return result
+
 #dll references
-setup_api         = ctypes.windll.setupapi
-hid_dll              = ctypes.windll.hid
-kernel32            = ctypes.windll.kernel32
+setup_api       = ctypes.windll.setupapi
+hid_dll         = ctypes.windll.hid
+kernel32        = ctypes.windll.kernel32
 
 #os independent functions
 ReadFile            = kernel32.ReadFile
 CancelIo            = kernel32.CancelIo
 WriteFile           = kernel32.WriteFile
 CloseHandle         = kernel32.CloseHandle
+CloseHandle.restype = BOOL
+CloseHandle.argtypes = [HANDLE]
 SetEvent            = kernel32.SetEvent
 WaitForSingleObject = kernel32.WaitForSingleObject
 #SetupDiGetDeviceInstanceId = setup_api.SetupDiGetDeviceInstanceId
 
 #os dependant functions and definitions
-if not os_supports_unicode():
-    c_tchar                         = c_char
-    SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailA
-    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdA
-    SetupDiGetClassDevs             = setup_api.SetupDiGetClassDevsA
-    CM_Get_Device_ID                = setup_api.CM_Get_Device_IDA
-    CreateFile                      = kernel32.CreateFileA
-    CreateEvent                     = kernel32.CreateEventA
-    string_at                       = ctypes.string_at
-else:
-    c_tchar                         = c_wchar
-    SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailW
-    SetupDiGetDeviceInstanceId      = setup_api.SetupDiGetDeviceInstanceIdW
-    SetupDiGetClassDevs             = setup_api.SetupDiGetClassDevsW
-    CM_Get_Device_ID                = setup_api.CM_Get_Device_IDW
-    CreateFile                      = kernel32.CreateFileW
-    CreateEvent                     = kernel32.CreateEventW
-    string_at                       = ctypes.wstring_at
+c_tchar                         = c_wchar
+CreateFile                      = kernel32.CreateFileW
+CreateEvent                     = kernel32.CreateEventW
+    
+CM_Get_Device_ID                = setup_api.CM_Get_Device_IDW
+
+SetupDiEnumDeviceInfo           = setup_api.SetupDiEnumDeviceInfo
+SetupDiEnumDeviceInterfaces     = setup_api.SetupDiEnumDeviceInterfaces
+SetupDiDestroyDeviceInfoList    = setup_api.SetupDiDestroyDeviceInfoList
 
 b_verbose = True
 usb_verbose = False
 
-#structures for ctypes
+#**************
+# SetupApi.dll, it likes pack'ed = 1 structures
 class GUID(Structure):
+    """GUID Windows OS structure"""
+    _pack_ = 1
     _fields_ = [("data1", DWORD),
                 ("data2", WORD),
                 ("data3", WORD),
@@ -78,38 +88,112 @@ class OVERLAPPED(Structure):
         ("h_event",         HANDLE)
     ]
     
-#**************
-# SetupApi.dll, it likes pack'ed = 1 structures
 class SP_DEVICE_INTERFACE_DATA(Structure):
+    """
+    typedef struct _SP_DEVICE_INTERFACE_DATA {
+      DWORD     cbSize;
+      GUID      InterfaceClassGuid;
+      DWORD     Flags;
+      ULONG_PTR Reserved;
+    } SP_DEVICE_INTERFACE_DATA, *PSP_DEVICE_INTERFACE_DATA;
+    """
     _pack_ = WIN_PACK
-    _fields_ = [("cb_size", c_ulong),
-        ("interface_class_guid", GUID),
-        ("flags", c_ulong),
-        ("reserved", POINTER(ULONG))
+    _fields_ = [ \
+            ("cb_size",              DWORD),
+            ("interface_class_guid", GUID),
+            ("flags",                DWORD),
+            ("reserved",             POINTER(ULONG))
     ]
 
 class SP_DEVICE_INTERFACE_DETAIL_DATA(Structure):
+    """
+    typedef struct _SP_DEVICE_INTERFACE_DETAIL_DATA {
+      DWORD cbSize;
+      TCHAR DevicePath[ANYSIZE_ARRAY];
+    } SP_DEVICE_INTERFACE_DETAIL_DATA, *PSP_DEVICE_INTERFACE_DETAIL_DATA;
+    """
     _pack_ = WIN_PACK
-    _fields_ = [("cb_size", DWORD),
-        ("device_path", c_tchar * 1) # device_path[1]
+    _fields_ = [ \
+            ("cb_size",     DWORD),
+            ("device_path", TCHAR * 1) # device_path[1]
     ]
+    def get_string(self):
+        """Retreive stored string"""
+        return ctypes.wstring_at(byref(self, sizeof(DWORD))) 
 
 class SP_DEVINFO_DATA(Structure):
+    """
+    typedef struct _SP_DEVINFO_DATA {
+      DWORD     cbSize;
+      GUID      ClassGuid;
+      DWORD     DevInst;
+      ULONG_PTR Reserved;
+    } SP_DEVINFO_DATA, *PSP_DEVINFO_DATA;
+    """
     _pack_ = WIN_PACK
-    _fields_ = [("cb_size", DWORD),
-        ("class_guid", GUID),
-        ("dev_inst", DWORD),
-        ("reserved", POINTER(ULONG)),
+    _fields_ = [ \
+            ("cb_size",     DWORD),
+            ("class_guid",  GUID),
+            ("dev_inst",    DWORD),
+            ("reserved",    POINTER(ULONG)),
     ]
     
-# Flags controlling what is included in the device information set built
-# by SetupDiGetClassDevs
-DIGCF_DEFAULT         = 0x00000001  # only valid with DIGCF_DEVICEINTERFACE
-DIGCF_PRESENT         = 0x00000002
-DIGCF_ALLCLASSES      = 0x00000004
-DIGCF_PROFILE         = 0x00000008
-DIGCF_DEVICEINTERFACE = 0x00000010
 
+SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailW
+SetupDiGetDeviceInterfaceDetail.restype = BOOL
+SetupDiGetDeviceInterfaceDetail.argtypes = [
+    HANDLE, # __in       HDEVINFO DeviceInfoSet,
+    POINTER(SP_DEVICE_INTERFACE_DATA), # __in PSP_DEVICE_INTERFACE_DATA DeviceIn
+    # __out_opt  PSP_DEVICE_INTERFACE_DETAIL_DATA DeviceInterfaceDetailData,
+    POINTER(SP_DEVICE_INTERFACE_DETAIL_DATA),
+    DWORD, # __in       DWORD DeviceInterfaceDetailDataSize,
+    POINTER(DWORD), # __out_opt  PDWORD RequiredSize,
+    POINTER(SP_DEVINFO_DATA), # __out_opt  PSP_DEVINFO_DATA DeviceInfoData
+    ]
+
+SetupDiGetDeviceInstanceId          = setup_api.SetupDiGetDeviceInstanceIdW
+SetupDiGetDeviceInstanceId.restype  = BOOL 
+SetupDiGetDeviceInstanceId.argtypes = [
+    HANDLE, # __in       HDEVINFO DeviceInfoSet,
+    POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
+    LPWSTR, # __out_opt  PTSTR DeviceInstanceId,
+    DWORD,  # __in       DWORD DeviceInstanceIdSize,
+    POINTER(DWORD), # __out_opt  PDWORD RequiredSize
+    ]
+
+SetupDiGetClassDevs             = setup_api.SetupDiGetClassDevsW
+SetupDiGetClassDevs.restype  = HANDLE
+SetupDiGetClassDevs.argtypes = [
+    POINTER(GUID), # __in_opt  const GUID *ClassGuid,
+    LPCWSTR, # __in_opt  PCTSTR Enumerator,
+    HANDLE,  # __in_opt  HWND hwndParent,
+    DWORD,   # __in      DWORD Flags
+    ]
+
+SetupDiGetDeviceRegistryProperty = setup_api.SetupDiGetDeviceRegistryPropertyW
+SetupDiGetDeviceRegistryProperty.restype  = BOOL
+SetupDiGetDeviceRegistryProperty.argtypes = [
+    HANDLE,         # __in       HDEVINFO DeviceInfoSet,
+    POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
+    DWORD,          # __in       DWORD Property,
+    POINTER(DWORD), # __out_opt  PDWORD PropertyRegDataType,
+    LPVOID,         # __out_opt  PBYTE PropertyBuffer,
+    DWORD,          # __in       DWORD PropertyBufferSize,
+    POINTER(DWORD), # __out_opt  PDWORD RequiredSize
+    ]
+
+#structures for ctypes
+class DIGCF:
+    """
+    Flags controlling what is included in the device information set built
+    by SetupDiGetClassDevs
+    """
+    DEFAULT         = 0x00000001  # only valid with DIGCF.DEVICEINTERFACE
+    PRESENT         = 0x00000002
+    ALLCLASSES      = 0x00000004
+    PROFILE         = 0x00000008
+    DEVICEINTERFACE = 0x00000010
+	
 #*******
 # hid.dll
 class HIDD_ATTRIBUTES(Structure):
@@ -317,6 +401,8 @@ FILE_SHARE_WRITE = 2
 OPEN_EXISTING   = 3
 OPEN_ALWAYS     = 4
 #
+INVALID_HANDLE_VALUE = HANDLE(-1)
+
 FILE_FLAG_OVERLAPPED    = 1073741824
 FILE_ATTRIBUTE_NORMAL   = 128
 #
@@ -324,8 +410,89 @@ NO_ERROR = 0
 ERROR_IO_PENDING = 997
 
 def GetHidGuid():
-    "get system-defined GUID for HIDClass devices"
-    g = GUID()
-    hid_dll.HidD_GetHidGuid(byref(g))
-    return g
+    "Get system-defined GUID for HIDClass devices"
+    hid_guid = GUID()
+    hid_dll.HidD_GetHidGuid(byref(hid_guid))
+    return hid_guid
 
+class DeviceInterfaceSetInfo(object):
+    """Context manager for SetupDiGetClassDevs / SetupDiDestroyDeviceInfoList
+    resource allocation / cleanup
+    """
+    def __init__(self, guid_target):
+        self.guid = guid_target
+        self.h_info = None
+
+    def __enter__(self):
+        """Context manager initializer, calls self.open()"""
+        return self.open()
+
+    def open(self):
+        """
+        Calls SetupDiGetClassDevs to obtain a handle to an opaque device
+        information set that describes the device interfaces supported by all
+        the USB collections currently installed in the system. The
+        application should specify DIGCF.PRESENT and DIGCF.INTERFACEDEVICE
+        in the Flags parameter passed to SetupDiGetClassDevs.
+        """
+        self.h_info = SetupDiGetClassDevs(byref(self.guid), None, None,
+                (DIGCF.PRESENT | DIGCF.DEVICEINTERFACE) )
+
+        return self.h_info
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager clean up, calls self.close()"""
+        self.close()
+
+    def close(self):
+        """Destroy allocated storage"""
+        if self.h_info and self.h_info != INVALID_HANDLE_VALUE:
+            # clean up
+            setup_api.SetupDiDestroyDeviceInfoList(self.h_info)
+        self.h_info = None
+
+def enum_device_interfaces(h_info, guid):
+    """Function generator that returns a device_interface_data enumerator
+    for the given device interface info and GUID parameters
+    """
+    dev_interface_data = SP_DEVICE_INTERFACE_DATA()
+    dev_interface_data.cb_size = sizeof(dev_interface_data)
+
+    device_index = 0
+    while setup_api.SetupDiEnumDeviceInterfaces(h_info,
+            None,
+            byref(guid),
+            device_index,
+            byref(dev_interface_data) ):
+        yield dev_interface_data
+        device_index += 1
+    del dev_interface_data
+
+def get_device_path(h_info, interface_data, ptr_info_data = None):
+    """"Returns Hardware device path
+    Parameters:
+        h_info,         interface set info handler
+        interface_data, device interface enumeration data
+        ptr_info_data,  pointer to SP_DEVINFO_DATA() instance to receive details
+    """
+    required_size = c_ulong(0)
+
+    dev_inter_detail_data         = SP_DEVICE_INTERFACE_DETAIL_DATA()
+    dev_inter_detail_data.cb_size = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA)
+
+    # get actual storage requirement
+    SetupDiGetDeviceInterfaceDetail(h_info, byref(interface_data),
+            None, 0, byref(required_size),
+            None)
+    ctypes.resize(dev_inter_detail_data, required_size.value)
+
+    # read value
+    SetupDiGetDeviceInterfaceDetail(h_info, byref(interface_data),
+            byref(dev_inter_detail_data), required_size, None,
+            ptr_info_data)
+
+    # extract string only
+    return dev_inter_detail_data.get_string()
+
+
+ 

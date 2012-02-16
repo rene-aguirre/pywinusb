@@ -10,17 +10,15 @@ import _winreg
 import threading
 import time
 
-from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof
+from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof, \
+        create_unicode_buffer
 from ctypes.wintypes import DWORD
 
 #local modules
 from helpers import HIDError, synchronized, ReadOnlyList
 
-from winapi import GetHidGuid, SetupDiGetClassDevs, DIGCF_PRESENT, \
-    DIGCF_DEVICEINTERFACE, \
-    SP_DEVICE_INTERFACE_DATA, SP_DEVICE_INTERFACE_DETAIL_DATA,  \
-    SP_DEVINFO_DATA, SetupDiGetDeviceInterfaceDetail, setup_api, \
-    hid_dll, HidP_Input, HidP_Output, HidP_Feature, string_at, \
+from winapi import GetHidGuid, SP_DEVINFO_DATA, setup_api, \
+    hid_dll, HidP_Input, HidP_Output, HidP_Feature, \
     SetupDiGetDeviceInstanceId, c_tchar, CM_Get_Device_ID, \
     CreateFile, GENERIC_READ, GENERIC_WRITE, FILE_SHARE_READ, \
     OVERLAPPED, WriteFile, CreateEvent, WaitForSingleObject, \
@@ -28,7 +26,8 @@ from winapi import GetHidGuid, SetupDiGetClassDevs, DIGCF_PRESENT, \
     HIDP_CAPS, HidStatus, HIDP_BUTTON_CAPS, FILE_ATTRIBUTE_NORMAL, \
     FILE_FLAG_OVERLAPPED, HIDP_VALUE_CAPS, WAIT_OBJECT_0, \
     SetEvent, ReadFile, ERROR_IO_PENDING, INFINITE, CancelIo, \
-    HIDP_DATA
+    HIDP_DATA, DeviceInterfaceSetInfo, enum_device_interfaces, \
+    get_device_path
 
 MAX_HID_STRING_LENGTH = 128
 
@@ -61,55 +60,25 @@ def get_short_usage_id(full_usage_id):
     """Extract 16 bits usage id from full usage id (32 bits)"""
     return full_usage_id & 0xffff
 
-def hid_device_path_exists(device_path, hid_guid = GetHidGuid()):
+def hid_device_path_exists(device_path, guid = None):
     """Test if required device_path is still valid 
     (HID device connected to host)
     """
-    # get HID device class guid
+    # expecing HID devices
+    if not guid:
+        guid = GetHidGuid()
 
-    # handle to an opaque device information set
-    h_info = SetupDiGetClassDevs(byref(hid_guid), None, None, (DIGCF_PRESENT \
-        | DIGCF_DEVICEINTERFACE))
+    info_data         = SP_DEVINFO_DATA()
+    info_data.cb_size = sizeof(SP_DEVINFO_DATA)
 
-    if h_info == INVALID_HANDLE_VALUE:
-        return False
-    try:
-        # retrieve all the available interface information.
-        device_interface = SP_DEVICE_INTERFACE_DATA()
-        device_interface.cb_size = sizeof(device_interface)
-
-        dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data)
-
-        dev_index = 0
-        required_size = c_ulong()
-        while setup_api.SetupDiEnumDeviceInterfaces(h_info, None, 
-                byref(hid_guid), dev_index, byref(device_interface)):
-            dev_index += 1
-
-            # validate if hid path would fit
-            required_size.value = 0
-            SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
-                None, 0, byref(required_size), None)
-
-            if required_size.value > dev_inter_detail_data.cb_size:
-                # allow more memory
-                ctypes.resize( dev_inter_detail_data, required_size.value)
-
-            # it's OK to get the details
-            SetupDiGetDeviceInterfaceDetail(h_info, byref(device_interface), 
-                    byref(dev_inter_detail_data), required_size, None, None)
-
-            test_device_path = string_at(byref(dev_inter_detail_data, 
-                sizeof(DWORD)))
+    with DeviceInterfaceSetInfo(guid) as h_info:
+        for interface_data in enum_device_interfaces(h_info, guid):
+            test_device_path = get_device_path(h_info, 
+                    interface_data, 
+                    byref(info_data))
             if test_device_path == device_path:
                 return True
-    finally:
-        # clean up
-        setup_api.SetupDiDestroyDeviceInfoList(h_info)
-        del dev_inter_detail_data
-        del device_interface
-    #
+    # Not any device now with that path
     return False
 
 def find_all_hid_devices():
@@ -138,86 +107,48 @@ def find_all_hid_devices():
     #     obtain a file handle to a HID collection.
     #
     # get HID device class guid
-    hid_guid = GetHidGuid()
+    guid = GetHidGuid()
 
-    # handle to an opaque device information set
-    h_info = SetupDiGetClassDevs(byref(hid_guid), None, None, 
-            (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE) )
+    # retrieve all the available interface information.
+    results = []
+    required_size = DWORD()
 
-    if h_info == INVALID_HANDLE_VALUE:
-        return []
+    info_data         = SP_DEVINFO_DATA()
+    info_data.cb_size = sizeof(SP_DEVINFO_DATA)
 
-    try:
-        # retrieve all the available interface information.
-        dev_interface_data = SP_DEVICE_INTERFACE_DATA()
-        dev_interface_data.cb_size = sizeof(dev_interface_data)
+    with DeviceInterfaceSetInfo(guid) as h_info:
+        for interface_data in enum_device_interfaces(h_info, guid):
+            device_path = get_device_path(h_info, 
+                    interface_data, 
+                    byref(info_data))
 
-        dev_inter_detail_data = SP_DEVICE_INTERFACE_DETAIL_DATA()
-        dev_inter_detail_data.cb_size = sizeof(dev_inter_detail_data) 
-
-        dev_info_data = SP_DEVINFO_DATA()
-        dev_info_data.cb_size = sizeof(dev_info_data)
-
-        device_index = 0
-        required_size = c_ulong()
-        parent_device = c_ulong()
-        results = []
-        while setup_api.SetupDiEnumDeviceInterfaces(h_info, None, 
-                byref(hid_guid), device_index, 
-                byref(dev_interface_data) ):
-
-            # get actual storage requirement
-            required_size.value = 0
-            SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
-                    None, 0, byref(required_size), None)
-
-            if required_size.value > dev_inter_detail_data.cb_size:
-                # allow more memory, .cb_size should remain
-                ctypes.resize( dev_inter_detail_data, required_size.value)
-
-            # it's OK to get the details
-            SetupDiGetDeviceInterfaceDetail(h_info, byref(dev_interface_data), 
-                    byref(dev_inter_detail_data), required_size, None, 
-                    byref(dev_info_data))
-            device_path = string_at(byref(dev_inter_detail_data, sizeof(DWORD)))
+            parent_device = c_ulong()
 
             #get parent instance id (so we can discriminate on port)
             if setup_api.CM_Get_Parent(byref(parent_device), 
-                    dev_info_data.dev_inst, 0) != 0: #CR_SUCCESS = 0
+                    info_data.dev_inst, 0) != 0: #CR_SUCCESS = 0
                 parent_device.value = 0 #null
 
             #get unique instance id string
             required_size.value = 0
-            SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), None, 
-                0, byref(required_size) )
+            SetupDiGetDeviceInstanceId(h_info, byref(info_data),
+                    None, 0,
+                    byref(required_size) )
 
+            device_instance_id = create_unicode_buffer(required_size.value)
             if required_size.value > 0:
-                device_instance_id_type = c_tchar * required_size.value
-                device_instance_id = device_instance_id_type()
-                SetupDiGetDeviceInstanceId(h_info, byref(dev_info_data), 
-                        byref(device_instance_id), required_size, 
+                SetupDiGetDeviceInstanceId(h_info, byref(info_data),
+                        device_instance_id, required_size,
                         byref(required_size) )
+
                 hid_device = HidDevice(device_path, 
                         parent_device.value, device_instance_id.value )
-                del device_instance_id
-                del device_instance_id_type
             else:
                 hid_device = HidDevice(device_path, parent_device.value )
 
-            # add device to results
-            if hid_device.vendor_id: #this means device it's not protected
+            # add device to results, if not protected
+            if hid_device.vendor_id:
                 results.append(hid_device)
-            device_index += 1
-        # start collecting
-        del dev_info_data
-        del dev_inter_detail_data
-        del dev_interface_data
-    finally:
-        # clean up
-        setup_api.SetupDiDestroyDeviceInfoList(h_info)
-    # more clean up
-    del hid_guid
-
     return results
 
 class HidDeviceFilter(object):
@@ -553,7 +484,8 @@ class HidDevice(HidDeviceBaseClass):
                         HidReport( self, HidP_Input, report_id )
             #prepare input reports handlers
             self._input_report_queue = HidDevice.InputReportQueue( \
-                self.max_input_queue_size, self.hid_caps.input_report_byte_length)
+                    self.max_input_queue_size, 
+                    self.hid_caps.input_report_byte_length)
             self.__input_processing_thread = \
                     HidDevice.InputReportProcessingThread(self)
             self.__reading_thread = HidDevice.InputReportReaderThread( \
@@ -793,7 +725,8 @@ class HidDevice(HidDeviceBaseClass):
                 for function_handler in handlers:
                     #check if the application wants some particular parameter
                     if handlers[function_handler]:
-                        function_handler(new_value, event_kind, handlers[function_handler])
+                        function_handler(new_value, 
+                                event_kind, handlers[function_handler])
                     else:
                         function_handler(new_value, event_kind)
 
@@ -1074,7 +1007,7 @@ class ReportItem(object):
         #verify it item is value array
         if self.__is_value:
             if self.__is_value_array:
-                byte_size = (caps_record.bit_size * caps_record.report_count) / 8
+                byte_size = (caps_record.bit_size * caps_record.report_count)/8
                 if (caps_record.bit_size * caps_record.report_count) % 8: 
                     #remainder
                     byte_size += 1
