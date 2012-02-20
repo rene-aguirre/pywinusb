@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Standar HID usage page definitions
+"""
 #
 class UsagePage(object):
     """Translate usage name between numeric and string values.
@@ -33,7 +39,8 @@ class UsagePage(object):
     }
 
     # oposite key/value arrangement
-    __usage_map_number_keys = dict([(b, a) for (a, b) in __usage_map_string_keys.items()])
+    __usage_map_number_keys = dict([(b, a) for (a, b) \
+            in __usage_map_string_keys.items()])
     #important: items are sorted!
     #range, name
     __range_usages = [\
@@ -106,12 +113,14 @@ class UsagePage(object):
 ] = range(19)
     
 class HidUsage(object):
-    #usage tables
-    #done finding regex:
-    #    ^0*\([0-9\-a-fA-F]+\)\( \)\(\D*\)\( .*\)\( \d+\.\d+\)$
-    #    ^0*\([0-9\-a-fA-F]+\)\( \)\(\D*\)\( .*\)\( \d+\.\d+\.*\d*\)$
-    #and replacing by:
-    #    0x\1: ("\3", \4),
+    """\
+    usage tables
+    done finding regex:
+        ^0*\([0-9\-a-fA-F]+\)\( \)\(\D*\)\( .*\)\( \d+\.\d+\)$
+        ^0*\([0-9\-a-fA-F]+\)\( \)\(\D*\)\( .*\)\( \d+\.\d+\.*\d*\)$
+    and replacing by:
+        0x\1: ("\3", \4),
+    """
     Usages = {
     0x01: { #generic desktop page
         #UsageID: ("Usage Name", UsageType),
@@ -1061,14 +1070,12 @@ class HidUsage(object):
         self.page_id = page_id
         self.usage_id = usage_id
         
-    def get_buttons(self):
-        pass
-
     def __repr__(self):
         if self.page_id in self.Usages:
             page = self.Usages[self.page_id]
             if self.usage_id in page:
-                return "%s device, %s usage" % (str(UsagePage(self.page_id)), page[self.usage_id][0])
+                return "%s device, %s usage" % (str(UsagePage(self.page_id)), 
+                        page[self.usage_id][0])
             else:
                 return "%s device, Unknown usage" % str(UsagePage(page))
         return "Unknown Page/usage"
@@ -1083,5 +1090,4 @@ if __name__ == '__main__':
     ]
     for item in PAGES:
         print item, hex(int(item))
-    a = HidUsage(None)
-    
+

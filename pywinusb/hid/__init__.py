@@ -21,9 +21,9 @@ interface.
 """
 
 __version__ = '0.2.9'
-__author__ = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
-__url__ = 'http://code.google.com/p/pywinusb'
-__all__ = []
+__author__  = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
+__url__     = 'https://github.com/rene-aguirre/pywinusb'
+__all__     = []
 
 from core import get_full_usage_id, get_usage_page_id, get_short_usage_id, \
     hid_device_path_exists, find_all_hid_devices, \

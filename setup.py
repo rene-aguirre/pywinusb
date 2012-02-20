@@ -17,7 +17,7 @@ setup(name='pywinusb',
       description=("A package that simplifies USB/HID communications on windows"),
       long_description=long_description,
       classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Environment :: Win32 (MS Windows)",
         "Operating System :: Microsoft :: Windows",
         "Programming Language :: Python",
