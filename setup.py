@@ -38,9 +38,10 @@ setup(name='pywinusb',
       license='BSD',
       packages=find_packages(),
       package_data = {
-        #other files
-        '':['README.txt', 'LICENSE.txt', 'TODO.txt', 'CHANGES.txt',
-            'examples/hook_button.py', 'examples/simple_send.py'],
-        },
+          # for all packages
+          ''         : ['*.txt', '*.rst', 'examples/*.py'],
+          },
+      include_package_data = True,
       namespace_packages=['pywinusb']
       )
+
