@@ -1,18 +1,27 @@
-import os
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os, sys
+
 try:
     from setuptools import setup, find_packages
 except ImportError:
-    import sys
-    from distutils.core import setup
-    print "The Setuptools package is not in your Python packages path.\n" \
-            "As an alternative copy the ./pywinusb sub-folder content to your " \
-            "Python packages path (i.e. C:\Python26\Lib\site\packages\)"
+    sys.stdout.write("Setuptools or Distribute packages are required.") 
     sys.exit(1)
+
+# minimal python3 support
+extra = {}
+if sys.version_info >= (3,):
+    extra['use_2to3'] = True
+    # extra['convert_2to3_doctests'] = ['src/your/module/README.txt']
+    # extra['use_2to3_fixers'] = ['your.fixers']
+
 VERSION = '0.3.0'
-README = os.path.join(os.path.dirname(__file__), 'README.txt')
-CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.txt')
+README  = os.path.join(os.path.dirname(__file__), 'README.rst')
+CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.rst')
+
 long_description = open(README).read() + open(CHANGES).read() + 'nn'
-setup(name='pywinusb',
+
+setup(name = 'pywinusb',
       version = VERSION,
       description=("A package that simplifies USB/HID communications on windows"),
       long_description=long_description,
@@ -34,7 +43,7 @@ setup(name='pywinusb',
       keywords='hid usb usages',
       author='Rene F. Aguirre',
       author_email='rene.f.aguirre@gmail.com',
-      url='http://code.google.com/p/pywinusb',
+      url='https://github.com/rene-aguirre/pywinusb',
       license='BSD',
       packages=find_packages(),
       package_data = {
@@ -42,6 +51,7 @@ setup(name='pywinusb',
           ''         : ['*.txt', '*.rst', 'examples/*.py'],
           },
       include_package_data = True,
-      namespace_packages=['pywinusb']
+      namespace_packages=['pywinusb'],
+      **extra
       )
 

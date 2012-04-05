@@ -9,12 +9,10 @@ Introduction
 
 This project aims to be a simple USB/HID user application space (hence no system 
 drivers needed) 100% python package (without C extensions). Initially targeting 
-simple HID devices management, also planed, is `support for WinUSB`_ high level wrapping.
+simple HID devices management.
 
 The vision for this project is to be something similar to `PySerial` or `PyParallel` 
 but for USB/HID hardware enthusiasts.
-
-.. _support for WinUSB: http://msdn.microsoft.com/en-us/library/aa476426.aspx
 
 Advantages
 ----------
@@ -39,12 +37,10 @@ Installation Instructions
 Windows
 -------
 
-No package releases yet.  For now you can access the code using `the svn repository`_.
+The most convenient way of installing is using `easy_install` or `pip`, I recomend to do this once you are familiar with the library as you might loose track of the example source files, but you can take a look to the example or the source browsing the github repository.
 
-I'm planning initially to have a mature pywinusb.hid name space (sub-package) 
-implementation before attempting any of the pywinusb.winusb stuff.
+If using a source package (.zip) from PyPi un-zip your file, or get the source from the main repository and run the familiar `setup.py install` command line is sufficient, setuptools or distribute (for python 3) are required.
 
-.. _the svn repository: http://code.google.com/p/pywinusb/source/checkout
 
 Other
 -----
@@ -59,7 +55,7 @@ for instance, how to use pywinusb.hid to handle events from HID class devices us
 
 Gernal purpose instructions can be found on the `main project code page`_.
 
-.. _main project code page: http://code.google.com/p/pywinusb
+.. _main project code page: https://github.com/rene-aguirre/pywinusb
 
 Utilities
 ---------
