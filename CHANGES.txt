@@ -1,6 +1,11 @@
 -------------------------
 Release changes
 -------------------------
+
+0.3.0,
+ * Refactored setup api handling.
+ * Many PyLint fixes.
+
 0.2.9,
  * Fixed broken value array usages transactions
  * Better Setup API device paths handling
