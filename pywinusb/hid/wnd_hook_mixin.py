@@ -75,7 +75,7 @@ class WndProcHookMixin:
         # the key is unlikely to be found (which is the case here, since most
         # messages will not have handlers).  This is called via a ctypes shim
         # for every single windows message so dispatch speed is important
-        if self.__msg_dict.has_key(msg):
+        if msg in self.__msg_dict:
             # if the handler returns false, we terminate the message here Note
             # that we don't pass the hwnd or the message along Handlers should
             # be really, really careful about returning false here
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         try:
             import wx
         except:
-            print "Need to install wxPython library"
+            print("Need to install wxPython library")
             return
 
         class MyFrame(wx.Frame, WndProcHookMixin):
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             
             def on_hooked_size(self, w_param, l_param):
                 """Custom WM_SIZE handler"""
-                print "WM_SIZE [WPARAM:%i][LPARAM:%i]" % (w_param, l_param)
+                print("WM_SIZE [WPARAM:%i][LPARAM:%i]" % (w_param, l_param))
                 return True
 
         app = wx.App(False)

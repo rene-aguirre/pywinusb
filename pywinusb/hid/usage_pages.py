@@ -40,7 +40,7 @@ class UsagePage(object):
 
     # oposite key/value arrangement
     __usage_map_number_keys = dict([(b, a) for (a, b) \
-            in __usage_map_string_keys.items()])
+            in list(__usage_map_string_keys.items())])
     #important: items are sorted!
     #range, name
     __range_usages = [\
@@ -58,7 +58,7 @@ class UsagePage(object):
         if isinstance(page, str):
             if page not in self.__usage_map_string_keys:
                 raise KeyError("Wrong page name or page name resoves to value range")
-        elif isinstance(page, int) or isinstance(page, long):
+        elif isinstance(page, int) or isinstance(page, int):
             if (page < 0 or page > 0xffff):
                 raise ValueError("Wrong page range (0~0xffff)")
         else:
@@ -110,7 +110,7 @@ class UsagePage(object):
     UM,
     SF,
     BUFFEREDBYTES,
-] = range(19)
+] = list(range(19))
     
 class HidUsage(object):
     """\
@@ -1089,5 +1089,5 @@ if __name__ == '__main__':
         #UsagePage("Power"), #range
     ]
     for item in PAGES:
-        print item, hex(int(item))
+        print(item, hex(int(item)))
 

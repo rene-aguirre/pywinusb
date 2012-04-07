@@ -13,7 +13,7 @@ def click_signal(target_usage, target_vendor_id):
     all_devices = hid.HidDeviceFilter(vendor_id = target_vendor_id).get_devices()
     
     if not all_devices:
-        print "Can't find target device (vendor_id = 0x%04x)!" % target_vendor_id
+        print("Can't find target device (vendor_id = 0x%04x)!" % target_vendor_id)
     else:
         # search for our target usage
         # target pageId, usageId
@@ -33,11 +33,11 @@ def click_signal(target_usage, target_vendor_id):
                         # now toggle back the signal
                         report[target_usage] = 0
                         report.send()
-                        print "\nUsage clicked!\n"
+                        print("\nUsage clicked!\n")
                         return
             finally:
                 device.close()
-        print "The target device was found, but the requested usage does not exist!\n"
+        print("The target device was found, but the requested usage does not exist!\n")
     #
 if __name__ == '__main__':
     target_vendor_id = 0x1234 # just an example, change it to the actual vendor_id

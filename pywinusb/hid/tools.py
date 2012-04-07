@@ -2,14 +2,12 @@
 """
 Other helper functions.
 """
-import usage_pages
-from helpers import HIDError
-from winapi import HidP_Input, HidP_Output, HidP_Feature
+from . import usage_pages, helpers, winapi
 
 def write_documentation(self, output_file):
     "Issue documentation report on output_file file like object"
     if not self.is_opened():
-        raise HIDError("Device has to be opened to get documentation")
+        raise helpers.HIDError("Device has to be opened to get documentation")
     #format
     class CompundVarDict(object):
         """Compound variables dictionary.
@@ -81,14 +79,15 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
 """ % CompundVarDict(dev_vars)) #better than vars()!
     #return
     # inspect caps
-    for report_kind in [HidP_Input, HidP_Output, HidP_Feature]:
+    for report_kind in [winapi.HidP_Input, 
+            winapi.HidP_Output, winapi.HidP_Feature]:
         all_usages = self.usages_storage.get(report_kind, [])
         if all_usages:
-            print '*** %s Caps ***' % {
-                    HidP_Input   : "Input",
-                    HidP_Output  : "Output",
-                    HidP_Feature : "Feature"
-                    }[report_kind]
+            print('*** %s Caps ***' % {
+                    winapi.HidP_Input   : "Input",
+                    winapi.HidP_Output  : "Output",
+                    winapi.HidP_Feature : "Feature"
+                    }[report_kind])
             for usage_item in all_usages:
-                print usage_item.inspect()
+                print(usage_item.inspect())
 

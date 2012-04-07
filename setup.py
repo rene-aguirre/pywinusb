@@ -8,14 +8,7 @@ except ImportError:
     sys.stdout.write("Setuptools or Distribute packages are required.") 
     sys.exit(1)
 
-# minimal python3 support
-extra = {}
-if sys.version_info >= (3,):
-    extra['use_2to3'] = True
-    # extra['convert_2to3_doctests'] = ['src/your/module/README.txt']
-    # extra['use_2to3_fixers'] = ['your.fixers']
-
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 README  = os.path.join(os.path.dirname(__file__), 'README.rst')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.rst')
 
@@ -52,6 +45,5 @@ setup(name = 'pywinusb',
           },
       include_package_data = True,
       namespace_packages=['pywinusb'],
-      **extra
       )
 

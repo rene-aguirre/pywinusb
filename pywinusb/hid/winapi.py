@@ -8,7 +8,7 @@ from ctypes import byref, POINTER, sizeof
 from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE, BOOL, \
         WCHAR, LPWSTR, LPCWSTR, LPVOID
 #from core import HIDError
-from helpers import HIDError
+from . import helpers
 import platform
 
 UCHAR = c_ubyte
@@ -27,7 +27,7 @@ class WinApiException(Exception):
 def winapi_result( result ):
     """Validate WINAPI BOOL result, raise exception if failed"""
     if not result:
-        raise WinApiException(u"%d (%x): %s" % (ctypes.GetLastError(), 
+        raise WinApiException("%d (%x): %s" % (ctypes.GetLastError(), 
                 ctypes.GetLastError(), ctypes.FormatError()))
     return result
 
@@ -379,9 +379,9 @@ class HidStatus(object):
         self.error_code = error_code
         if error_code != self.HIDP_STATUS_SUCCESS:
             if error_code in self.error_message_dict:
-                raise HIDError("hidP error: %s" % self.error_message_dict[error_code])
+                raise helpers.HIDError("hidP error: %s" % self.error_message_dict[error_code])
             else:
-                raise HIDError("Unknown HidP error (%s)"%hex(error_code))
+                raise helpers.HIDError("Unknown HidP error (%s)"%hex(error_code))
 
 #*****************
 # kernel32

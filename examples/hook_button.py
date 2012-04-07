@@ -20,7 +20,7 @@ def test_telephony_hook():
     all_devices = hid.HidDeviceFilter().get_devices() 
 
     if not all_devices:
-        print "No HID class devices attached."
+        print("No HID class devices attached.")
     else:
         # search for our target usage (the hook button)
         #target pageId, usageId
@@ -33,9 +33,9 @@ def test_telephony_hook():
             # no need to check the value
             event_type = event_type #avoid pylint warnings
             if new_value:
-                print "On Hook!"
+                print("On Hook!")
             else:
-                print "Off Hook!"
+                print("Off Hook!")
         
         for device in all_devices:
             try:
@@ -47,10 +47,10 @@ def test_telephony_hook():
                 for input_report in all_input_reports:
                     if usage_telephony_hook in input_report:
                         #found a telephony device w/ hook button
-                        print "\nMonitoring %s %s device.\n" \
-                            % (device.vendor_name, device.product_name)
-                        print "Press any key to exit monitoring "\
-                            "(or remove HID device)..."
+                        print("\nMonitoring {0.vendor_name} {0.product_name} "\
+                                "device.\n".format(device))
+                        print("Press any key to exit monitoring " \
+                            "(or remove HID device)...")
                         
                         # add event handler (example of other available 
                         # events: EVT_PRESSED, EVT_RELEASED, EVT_ALL, ...)
@@ -68,8 +68,9 @@ def test_telephony_hook():
                         return
             finally:
                 device.close()
-        print "Sorry, no one of the attached HID class devices "\
-            "provide any Telephony Hook button"
+        print("Sorry, no one of the attached HID class devices "\
+            "provide any Telephony Hook button")
     #
 if __name__ == '__main__':
     test_telephony_hook()
+

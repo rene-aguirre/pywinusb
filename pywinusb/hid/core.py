@@ -5,29 +5,31 @@
 This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
+import sys
 import ctypes
-import _winreg
 import threading
 import time
+import collections
+if sys.version_info >= (3,):
+    import winreg
+else:
+    import _winreg as winreg
 
 from ctypes import c_ubyte, c_ulong, c_ushort, c_wchar, byref, sizeof, \
         create_unicode_buffer
 from ctypes.wintypes import DWORD
 
 #local modules
-from helpers import HIDError, synchronized, ReadOnlyList
+from . import helpers
+HIDError = helpers.HIDError
 
-from winapi import GetHidGuid, SP_DEVINFO_DATA, setup_api, \
-    hid_dll, HidP_Input, HidP_Output, HidP_Feature, \
-    SetupDiGetDeviceInstanceId, c_tchar, CM_Get_Device_ID, \
-    CreateFile, GENERIC_READ, GENERIC_WRITE, FILE_SHARE_READ, \
-    OVERLAPPED, WriteFile, CreateEvent, WaitForSingleObject, \
-    FILE_SHARE_WRITE, OPEN_EXISTING, HIDD_ATTRIBUTES, CloseHandle, \
-    HIDP_CAPS, HidStatus, HIDP_BUTTON_CAPS, FILE_ATTRIBUTE_NORMAL, \
-    FILE_FLAG_OVERLAPPED, HIDP_VALUE_CAPS, WAIT_OBJECT_0, \
-    SetEvent, ReadFile, ERROR_IO_PENDING, INFINITE, CancelIo, \
-    HIDP_DATA, DeviceInterfaceSetInfo, enum_device_interfaces, \
-    get_device_path
+from . import winapi
+setup_api    = winapi.setup_api
+hid_dll      = winapi.hid_dll
+HidP_Input   = winapi.HidP_Input
+HidP_Output  = winapi.HidP_Output
+HidP_Feature = winapi.HidP_Feature
+HidStatus    = winapi.HidStatus
 
 MAX_HID_STRING_LENGTH = 128
 
@@ -46,7 +48,7 @@ USAGE_EVENTS = [
     HID_EVT_RELEASED,
     HID_EVT_SET,
     HID_EVT_CLEAR,
-] = range(7)
+] = list(range(7))
 
 def get_full_usage_id(page_id, usage_id):
     """Convert to composite 32 bit page and usage ids"""
@@ -66,14 +68,14 @@ def hid_device_path_exists(device_path, guid = None):
     """
     # expecing HID devices
     if not guid:
-        guid = GetHidGuid()
+        guid = winapi.GetHidGuid()
 
-    info_data         = SP_DEVINFO_DATA()
-    info_data.cb_size = sizeof(SP_DEVINFO_DATA)
+    info_data         = winapi.SP_DEVINFO_DATA()
+    info_data.cb_size = sizeof(winapi.SP_DEVINFO_DATA)
 
-    with DeviceInterfaceSetInfo(guid) as h_info:
-        for interface_data in enum_device_interfaces(h_info, guid):
-            test_device_path = get_device_path(h_info, 
+    with winapi.DeviceInterfaceSetInfo(guid) as h_info:
+        for interface_data in winapi.enum_device_interfaces(h_info, guid):
+            test_device_path = winapi.get_device_path(h_info, 
                     interface_data, 
                     byref(info_data))
             if test_device_path == device_path:
@@ -107,18 +109,18 @@ def find_all_hid_devices():
     #     obtain a file handle to a HID collection.
     #
     # get HID device class guid
-    guid = GetHidGuid()
+    guid = winapi.GetHidGuid()
 
     # retrieve all the available interface information.
     results = []
     required_size = DWORD()
 
-    info_data         = SP_DEVINFO_DATA()
-    info_data.cb_size = sizeof(SP_DEVINFO_DATA)
+    info_data         = winapi.SP_DEVINFO_DATA()
+    info_data.cb_size = sizeof(winapi.SP_DEVINFO_DATA)
 
-    with DeviceInterfaceSetInfo(guid) as h_info:
-        for interface_data in enum_device_interfaces(h_info, guid):
-            device_path = get_device_path(h_info, 
+    with winapi.DeviceInterfaceSetInfo(guid) as h_info:
+        for interface_data in winapi.enum_device_interfaces(h_info, guid):
+            device_path = winapi.get_device_path(h_info, 
                     interface_data, 
                     byref(info_data))
 
@@ -131,13 +133,13 @@ def find_all_hid_devices():
 
             #get unique instance id string
             required_size.value = 0
-            SetupDiGetDeviceInstanceId(h_info, byref(info_data),
+            winapi.SetupDiGetDeviceInstanceId(h_info, byref(info_data),
                     None, 0,
                     byref(required_size) )
 
             device_instance_id = create_unicode_buffer(required_size.value)
             if required_size.value > 0:
-                SetupDiGetDeviceInstanceId(h_info, byref(info_data),
+                winapi.SetupDiGetDeviceInstanceId(h_info, byref(info_data),
                         device_instance_id, required_size,
                         byref(required_size) )
 
@@ -191,7 +193,7 @@ class HidDeviceFilter(object):
         results = {}.fromkeys(hid_filter)
 
         #the filter parameters
-        validating_attributes = self.filter_params.keys()
+        validating_attributes = list(self.filter_params.keys())
 
         #first filter out restricted access devices
         for item in results.keys():
@@ -229,7 +231,7 @@ class HidDeviceFilter(object):
                     if getattr(device, item) != self.filter_params[item]:
                         del results[device]
             #
-        return results.keys()
+        return list(results.keys())
 
 MAX_DEVICE_ID_LEN = 200 + 1 #+EOL (just in case)
 class HidDeviceBaseClass(object):
@@ -257,10 +259,10 @@ class HidDevice(HidDeviceBaseClass):
         """Retreive parent device string id"""
         if not self.parent_instance_id:
             return ""
-        dev_buffer_type = c_tchar * MAX_DEVICE_ID_LEN
+        dev_buffer_type = winapi.c_tchar * MAX_DEVICE_ID_LEN
         dev_buffer = dev_buffer_type()
         try:
-            if CM_Get_Device_ID(self.parent_instance_id, byref(dev_buffer), 
+            if winapi.CM_Get_Device_ID(self.parent_instance_id, byref(dev_buffer), 
                     MAX_DEVICE_ID_LEN, 0) == 0: #success
                 return dev_buffer.value
             return ""
@@ -301,8 +303,10 @@ class HidDevice(HidDeviceBaseClass):
         # HID device handle first
         h_hid = INVALID_HANDLE_VALUE
         try:
-            h_hid = int( CreateFile(device_path, GENERIC_READ | GENERIC_WRITE, 
-                FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, 0))
+            h_hid = int( winapi.CreateFile(device_path, 
+                winapi.GENERIC_READ | winapi.GENERIC_WRITE, 
+                winapi.FILE_SHARE_READ | winapi.FILE_SHARE_WRITE, 
+                None, winapi.OPEN_EXISTING, 0, 0))
         except:
             pass
         
@@ -311,7 +315,7 @@ class HidDevice(HidDeviceBaseClass):
 
         try:
             # get device attributes
-            hidd_attributes = HIDD_ATTRIBUTES()
+            hidd_attributes = winapi.HIDD_ATTRIBUTES()
             hidd_attributes.cb_size = sizeof(hidd_attributes)
             if not hid_dll.HidD_GetAttributes(h_hid, byref(hidd_attributes)):
                 del hidd_attributes
@@ -346,14 +350,14 @@ class HidDevice(HidDeviceBaseClass):
                 # alternate method, refer to windows registry for product 
                 # information
                 path_parts = device_path[len("\\\\.\\"):].split("#")
-                h_register = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, 
+                h_register = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
                     "SYSTEM\\CurrentControlSet\\Enum\\" + \
                     path_parts[0] + "\\" + \
                     path_parts[1] + "\\" + \
                     path_parts[2] )
-                self.product_name, other = _winreg.QueryValueEx(h_register, 
+                self.product_name, other = winreg.QueryValueEx(h_register, 
                         "DeviceDesc")
-                _winreg.CloseKey(h_register)
+                winreg.CloseKey(h_register)
             else:
                 self.product_name = product_name.value
             del product_name
@@ -372,7 +376,7 @@ class HidDevice(HidDeviceBaseClass):
             del serial_number_string
         finally:
             # clean up
-            CloseHandle(h_hid)
+            winapi.CloseHandle(h_hid)
 
     def is_active(self):
         """Poll if device is still valid"""
@@ -386,13 +390,13 @@ class HidDevice(HidDeviceBaseClass):
         """
         if self.is_opened():
             raise HIDError("Device already opened")
-        hid_handle = CreateFile(
+        hid_handle = winapi.CreateFile(
             self.device_path,
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            winapi.GENERIC_READ | winapi.GENERIC_WRITE,
+            winapi.FILE_SHARE_READ | winapi.FILE_SHARE_WRITE,
             None, # no security
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+            winapi.OPEN_EXISTING,
+            winapi.FILE_ATTRIBUTE_NORMAL | winapi.FILE_FLAG_OVERLAPPED,
             0 )
 
         if not hid_handle or hid_handle == INVALID_HANDLE_VALUE:
@@ -401,14 +405,14 @@ class HidDevice(HidDeviceBaseClass):
         ptr_preparsed_data = c_ulong()
         if not hid_dll.HidD_GetPreparsedData(int(hid_handle), 
                 byref(ptr_preparsed_data)):
-            CloseHandle(int(hid_handle))
+            winapi.CloseHandle(int(hid_handle))
             raise HIDError("Failure to get HID pre parsed data")
         self.ptr_preparsed_data = ptr_preparsed_data
         
         self.hid_handle = hid_handle
         
         #get top level capabilities
-        self.hid_caps = HIDP_CAPS()
+        self.hid_caps = winapi.HIDP_CAPS()
         HidStatus( hid_dll.HidP_GetCaps(ptr_preparsed_data, 
             byref(self.hid_caps)) )
         
@@ -416,27 +420,27 @@ class HidDevice(HidDeviceBaseClass):
         caps_length = c_ulong()
 
         all_items = [\
-            (HidP_Input,   HIDP_BUTTON_CAPS, 
+            (HidP_Input,   winapi.HIDP_BUTTON_CAPS, 
                 self.hid_caps.number_input_button_caps,    
                 hid_dll.HidP_GetButtonCaps
             ),
-            (HidP_Input,   HIDP_VALUE_CAPS,  
+            (HidP_Input,   winapi.HIDP_VALUE_CAPS,  
                 self.hid_caps.number_input_value_caps,     
                 hid_dll.HidP_GetValueCaps
             ),
-            (HidP_Output,  HIDP_BUTTON_CAPS, 
+            (HidP_Output,  winapi.HIDP_BUTTON_CAPS, 
                 self.hid_caps.number_output_button_caps,   
                 hid_dll.HidP_GetButtonCaps
             ),
-            (HidP_Output,  HIDP_VALUE_CAPS,  
+            (HidP_Output,  winapi.HIDP_VALUE_CAPS,  
                 self.hid_caps.number_output_value_caps,    
                 hid_dll.HidP_GetValueCaps
             ),
-            (HidP_Feature, HIDP_BUTTON_CAPS, 
+            (HidP_Feature, winapi.HIDP_BUTTON_CAPS, 
                 self.hid_caps.number_feature_button_caps,  
                 hid_dll.HidP_GetButtonCaps
             ),
-            (HidP_Feature, HIDP_VALUE_CAPS, 
+            (HidP_Feature, winapi.HIDP_VALUE_CAPS, 
                 self.hid_caps.number_feature_value_caps,
                 hid_dll.HidP_GetValueCaps
             ),
@@ -460,11 +464,11 @@ class HidDevice(HidDeviceBaseClass):
             for idx in range(caps_length.value):
                 usage_item = HidPUsageCaps( ctrl_array_struct[idx] )
                 #by report type
-                if not self.usages_storage.has_key(report_kind):
+                if report_kind not in self.usages_storage:
                     self.usages_storage[report_kind] = list()
                 self.usages_storage[report_kind].append( usage_item )
                 #also add report_id to known reports set
-                if not self.report_set.has_key(report_kind):
+                if report_kind not in self.report_set:
                     self.report_set[report_kind] = set()
                 self.report_set[report_kind].add( usage_item.report_id )
             del ctrl_array_struct
@@ -518,18 +522,18 @@ class HidDevice(HidDeviceBaseClass):
             raw_data = data
         #
         # Adding a lock when writing (overlapped writes)
-        over_write = OVERLAPPED()
-        over_write.h_event = CreateEvent(None, 0, 0, None)
+        over_write = winapi.OVERLAPPED()
+        over_write.h_event = winapi.CreateEvent(None, 0, 0, None)
         if over_write.h_event:
             overlapped_write = over_write
-            WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
+            winapi.WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
                 None, byref(overlapped_write)) #none overlapped
-            result = WaitForSingleObject(overlapped_write.h_event, 10000 )
-            CloseHandle(overlapped_write.h_event)
-            if result != WAIT_OBJECT_0: #success
+            result = winapi.WaitForSingleObject(overlapped_write.h_event, 10000 )
+            winapi.CloseHandle(overlapped_write.h_event)
+            if result != winapi.WAIT_OBJECT_0: #success
                 return False #device has being disconnected
         else:
-            return WriteFile(int(self.hid_handle), byref(raw_data), 
+            return winapi.WriteFile(int(self.hid_handle), byref(raw_data), 
                 len(raw_data),
                 None, None) #none overlapped
         return True #completed
@@ -607,7 +611,7 @@ class HidDevice(HidDeviceBaseClass):
             time.sleep(0.050) # 50 ms latency, just to avoid CPU consumption
 
         if self.hid_handle:
-            CloseHandle(self.hid_handle)
+            winapi.CloseHandle(self.hid_handle)
         
         # make sure report procesing thread is closed
         if self.__input_processing_thread:
@@ -682,7 +686,7 @@ class HidDevice(HidDeviceBaseClass):
         HID_EVT_CLEAR:      lambda a,b: not b,
     }
 
-    @synchronized(HidDeviceBaseClass._raw_reports_lock)
+    @helpers.synchronized(HidDeviceBaseClass._raw_reports_lock)
     def _process_raw_report(self, raw_report):
         "Default raw input report data handler"
         if not self.is_opened():
@@ -701,7 +705,7 @@ class HidDevice(HidDeviceBaseClass):
 
         if self.__raw_handler:
             #this might slow down data throughput, but at the expense of safety
-            self.__raw_handler(ReadOnlyList(raw_report))
+            self.__raw_handler(helpers.ReadOnlyList(raw_report))
             return
         
         # using pre-parsed report templates, by report id
@@ -714,7 +718,9 @@ class HidDevice(HidDeviceBaseClass):
         new_values = report_template.get_usages()
         # now diff
         event_applies = self.evt_decision
-        for key in new_values and key in self.__evt_handlers:
+        for key in new_values:
+            if key not in self.__evt_handlers:
+                continue
             #check if event handler exist!
             for event_kind, handlers in self.__evt_handlers[key].items():
                 #key=event_kind, values=handler set
@@ -759,7 +765,7 @@ class HidDevice(HidDeviceBaseClass):
         if report_id == None or not handler_function:
             # do not add handler
             return False
-        assert(callable(handler_function)) # must be a function
+        assert(isinstance(handler_function, collections.Callable)) # must be a function
         # get dictionary for full usages
         top_map_handler = self.__evt_handlers.get(full_usage_id, dict())
         event_handler_set = top_map_handler.get(event_kind, dict())
@@ -900,7 +906,7 @@ class HidDevice(HidDeviceBaseClass):
             self.__abort = True
             if self.is_alive() and self.__overlapped_read_obj:
                 # force overlapped events competition
-                SetEvent(self.__overlapped_read_obj.h_event)
+                winapi.SetEvent(self.__overlapped_read_obj.h_event)
 
         def is_active(self):
             "main reading loop is running (bool)"
@@ -914,8 +920,8 @@ class HidDevice(HidDeviceBaseClass):
                 raise HIDError("Attempting to read input reports on non "\
                     "capable HID device")
  
-            over_read = OVERLAPPED()
-            over_read.h_event = CreateEvent(None, 0, 0, None)
+            over_read = winapi.OVERLAPPED()
+            over_read.h_event = winapi.CreateEvent(None, 0, 0, None)
             if over_read.h_event:
                 self.__overlapped_read_obj = over_read
             else:
@@ -935,12 +941,12 @@ class HidDevice(HidDeviceBaseClass):
                     break
                 # async read from device
                 bytes_read.value = 0
-                result = ReadFile(hid_object.hid_handle, 
+                result = winapi.ReadFile(hid_object.hid_handle, 
                     byref(buf_report), report_len, byref(bytes_read), 
                     byref(over_read) )
                 if not result:
                     error = ctypes.GetLastError()
-                    if error == ERROR_IO_PENDING:
+                    if error == winapi.ERROR_IO_PENDING:
                         # overlapped operation in progress
                         result = error
                     elif error == 1167:
@@ -949,14 +955,14 @@ class HidDevice(HidDeviceBaseClass):
                     else:
                         raise HIDError("Error %d when trying to read from HID "\
                             "device: %s"%(error, ctypes.FormatError(error)) )
-                if result == ERROR_IO_PENDING:
+                if result == winapi.ERROR_IO_PENDING:
                     #wait for event
                     if self.__abort:
                         break
-                    result = WaitForSingleObject( \
+                    result = winapi.WaitForSingleObject( \
                         over_read.h_event, 
-                        INFINITE )
-                    if result != WAIT_OBJECT_0 or self.__abort: #success
+                        winapi.INFINITE )
+                    if result != winapi.WAIT_OBJECT_0 or self.__abort: #success
                         break #device has being disconnected
                 # signal raw data already read
                 input_report_queue.post( buf_report )
@@ -965,13 +971,13 @@ class HidDevice(HidDeviceBaseClass):
             if not self.__abort:
                 # broadcast event
                 self.__abort = True
-                CancelIo( hid_object.hid_handle )
+                winapi.CancelIo( hid_object.hid_handle )
                 hid_object.close()
-            CloseHandle(over_read.h_event)
+            winapi.CloseHandle(over_read.h_event)
             del over_read
 
     def __repr__(self):
-        return u"HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
+        return "HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
             "Path: %s" % (self.vendor_id, self.product_id, self.version_number,\
             self.vendor_name, self.product_name, self.device_path)
 
@@ -1231,7 +1237,7 @@ class HidReport(object):
 
     def items(self):
         """Return key, value pairs (as standard dicts)"""
-        return self.__items.items()
+        return list(self.__items.items())
 
     def keys(self):
         """Return stored element keys (as standard dicts)"""
@@ -1285,7 +1291,7 @@ class HidReport(object):
         if not self.__usage_data_list: # create HIDP_DATA buffer
             max_items = hid_dll.HidP_MaxDataListLength(self.__report_kind, 
                 self.__hid_object.ptr_preparsed_data)
-            data_list_type = HIDP_DATA * max_items
+            data_list_type = winapi.HIDP_DATA * max_items
             self.__usage_data_list = data_list_type()
         #reference HIDP_DATA buffer
         data_list = self.__usage_data_list
@@ -1352,7 +1358,7 @@ class HidReport(object):
                 self.__hid_object.ptr_preparsed_data)
             if not max_items:
                 raise HIDError("Internal error while requesting usage length")
-            data_list_type = HIDP_DATA * max_items
+            data_list_type = winapi.HIDP_DATA * max_items
             self.__usage_data_list = data_list_type()
 
         #reference HIDP_DATA buffer
@@ -1413,7 +1419,7 @@ class HidReport(object):
             raise HIDError("Only for output or feature reports")
         self.__prepare_raw_data()
         #return read-only object for internal storage
-        return ReadOnlyList(self.__raw_data)
+        return helpers.ReadOnlyList(self.__raw_data)
 
     def send(self, raw_data = None):
         """Prepare HID raw report (unless raw_data is provided) and send 
@@ -1476,8 +1482,8 @@ class HidReport(object):
                 self.__hid_object._process_raw_report(raw_data)
             else:
                 self.set_raw_data(raw_data)
-            return ReadOnlyList(raw_data)
-        return ReadOnlyList([])
+            return helpers.ReadOnlyList(raw_data)
+        return helpers.ReadOnlyList([])
     #class HIDReport finishes ***********************
 
 class HidPUsageCaps(object):
@@ -1505,9 +1511,9 @@ class HidPUsageCaps(object):
             setattr(self, fname, int(getattr(range_struct, fname)))
         self.is_value  = False
         self.is_button = False
-        if isinstance(caps,  HIDP_BUTTON_CAPS):
+        if isinstance(caps,  winapi.HIDP_BUTTON_CAPS):
             self.is_button = True
-        elif isinstance(caps, HIDP_VALUE_CAPS):
+        elif isinstance(caps, winapi.HIDP_VALUE_CAPS):
             self.is_value = True
         else:
             pass
@@ -1518,7 +1524,7 @@ class HidPUsageCaps(object):
         for fname in dir(self):
             if not fname.startswith('_'):
                 value = getattr(self, fname)
-                if callable(value):
+                if isinstance(value, collections.Callable):
                     continue
                 results.append("    %s: %s\n" % (fname, value))
         return "".join( results )
@@ -1529,28 +1535,28 @@ def simple_test():
     import codecs, sys
     sys.stdout = codecs.getwriter('mbcs')(sys.stdout)
     # then the big cheese...
-    from tools import write_documentation
+    from . import tools
     all_hids = find_all_hid_devices()
     if all_hids:
-        print "Found HID class devices!, full details..."
+        print("Found HID class devices!, full details...")
         for dev in all_hids:
-            device_name = unicode(dev)
-            print device_name,'\n'
-            print '\n  Path:      ', dev.device_path
-            print '\n  Instance:  ', dev.instance_id 
-            print '\n  Port (ID): ', dev.get_parent_instance_id()
-            print '\n  Port (str):', unicode(dev.get_parent_device())
+            device_name = str(dev)
+            print(device_name,'\n')
+            print('\n  Path:      ', dev.device_path)
+            print('\n  Instance:  ', dev.instance_id) 
+            print('\n  Port (ID): ', dev.get_parent_instance_id())
+            print('\n  Port (str):', str(dev.get_parent_device()))
             #
-            print "Checking caps..."
-            print "-----------------"
+            print("Checking caps...")
+            print("-----------------")
             #
             try:
                 dev.open()
-                write_documentation(dev, sys.stdout)
+                tools.write_documentation(dev, sys.stdout)
             finally:
                 dev.close()
     else:
-        print "There's not any non system HID class device available"
+        print("There's not any non system HID class device available")
 #
 if __name__ == '__main__':
     simple_test()

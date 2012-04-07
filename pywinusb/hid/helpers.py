@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
 """Helper classs, functions and decorators"""
-
-from UserList import UserList
-
+import sys
+if sys.version_info >= (3,):
+    from collections import UserList
+else:
+    # python 2
+    from UserList import UserList
 
 class HIDError(Exception):
     "Main HID error exception class type"
@@ -41,9 +44,9 @@ def logging_decorator(func):
     """Allow logging function calls"""
     def you_will_never_see_this_name(*args, **kwargs):
         """Neither this docstring"""
-        print 'calling %s ...' % func.__name__
+        print('calling %s ...' % func.__name__)
         result = func(*args, **kwargs)
-        print 'completed: %s' % func.__name__
+        print('completed: %s' % func.__name__)
         return result
     return you_will_never_see_this_name
 

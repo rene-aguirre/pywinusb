@@ -9,9 +9,9 @@ expose here can be used.
 """
 import ctypes
 from ctypes.wintypes import DWORD
-from wnd_hook_mixin import WndProcHookMixin
-from core import HIDError, GetHidGuid
-from winapi import GUID
+from . import wnd_hook_mixin
+from . import core
+from . import winapi
 
 #for PNP notifications
 class DevBroadcastDevInterface(ctypes.Structure):
@@ -21,7 +21,7 @@ class DevBroadcastDevInterface(ctypes.Structure):
         ("dbcc_size",       DWORD), 
         ("dbcc_devicetype", DWORD),
         ("dbcc_reserved",   DWORD), 
-        ("dbcc_classguid",  GUID),
+        ("dbcc_classguid",  winapi.GUID),
         ("dbcc_name",       ctypes.c_wchar),
     ]
     def __init__(self):
@@ -29,7 +29,7 @@ class DevBroadcastDevInterface(ctypes.Structure):
         ctypes.Structure.__init__(self)
         self.dbcc_size       = ctypes.sizeof(self)
         self.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE
-        self.dbcc_classguid  = GetHidGuid()
+        self.dbcc_classguid  = winapi.GetHidGuid()
 
 #***********************************
 # PnP definitions
@@ -62,7 +62,7 @@ DBT_DEVTYP_HANDLE           = 0x00000006
 DEVICE_NOTIFY_WINDOW_HANDLE  = 0x00000000
 DEVICE_NOTIFY_SERVICE_HANDLE = 0x00000001
 
-class HidPnPWindowMixin(WndProcHookMixin):
+class HidPnPWindowMixin(wnd_hook_mixin.WndProcHookMixin):
     """Base for receiving PnP notifications.
     Just call HidPnPWindowMixin.__init__(my_hwnd) being
     my_hwnd the OS window handle (most GUI toolkits 
@@ -70,13 +70,13 @@ class HidPnPWindowMixin(WndProcHookMixin):
     """
     def __init__(self, wnd_handle):
         """HidPnPWindowMixin initializer"""
-        WndProcHookMixin.__init__(self, wnd_handle)
+        wnd_hook_mixin.WndProcHookMixin.__init__(self, wnd_handle)
         self.__hid_hwnd = wnd_handle
         self.current_status = "unknown"
         #register hid notification msg handler
         self.__h_notify = self._register_hid_notification()
         if not self.__h_notify:
-            raise HIDError("PnP notification setup failed!")
+            raise core.HIDError("PnP notification setup failed!")
         else:
             self.add_msg_handler(WM_DEVICECHANGE, self._on_hid_pnp)
             # add capability to filter out windows messages
@@ -84,7 +84,7 @@ class HidPnPWindowMixin(WndProcHookMixin):
     
     def unhook_wnd_proc(self):
         "This function must be called to clean up system resources"
-        WndProcHookMixin.unhook_wnd_proc(self)
+        wnd_hook_mixin.WndProcHookMixin.unhook_wnd_proc(self)
         if self.__h_notify:
             self._unregister_hid_notification() #ignore result
 
@@ -141,6 +141,6 @@ class HidPnPWindowMixin(WndProcHookMixin):
         
     def on_hid_pnp(self, new_status):
         "'Virtual' like function to refresh update for connection status"
-        print "HID:", new_status
+        print("HID:", new_status)
         return True
 
