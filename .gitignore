@@ -2,4 +2,5 @@
 *.bak
 dist/
 build/
+v_env/
 *.egg-info/

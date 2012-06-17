@@ -1478,10 +1478,9 @@ class HidReport(object):
                 int(self.__hid_object.hid_handle),
                 byref(raw_data), len(raw_data) ):
             #success
+            self.set_raw_data(raw_data)
             if do_process_raw_report:
                 self.__hid_object._process_raw_report(raw_data)
-            else:
-                self.set_raw_data(raw_data)
             return helpers.ReadOnlyList(raw_data)
         return helpers.ReadOnlyList([])
     #class HIDReport finishes ***********************
@@ -1529,34 +1528,50 @@ class HidPUsageCaps(object):
                 results.append("    %s: %s\n" % (fname, value))
         return "".join( results )
 
-def simple_test():
+def simple_test(target_vid = 0, target_pid = 0, output = None):
     """Check all HID devices conected to PC hosts."""
     # first be kind with local encodings
     import codecs, sys
-    sys.stdout = codecs.getwriter('mbcs')(sys.stdout)
+    if not output:
+        output = sys.stdout
+    output = codecs.getwriter('mbcs')(output)
     # then the big cheese...
     from . import tools
-    all_hids = find_all_hid_devices()
+    all_hids = None
+    if target_vid:
+        if target_pid:
+            # both vendor and product Id provided
+            device_filter = HidDeviceFilter(vendor_id = target_vid, 
+                    product_id = target_pid)
+        else:
+            # only vendor id
+            device_filter = HidDeviceFilter(vendor_id = target_vid)
+
+        all_hids = device_filter.get_devices()
+    else:
+        all_hids = find_all_hid_devices()
     if all_hids:
-        print("Found HID class devices!, full details...")
+        print("Found HID class devices!, writting details...")
         for dev in all_hids:
             device_name = str(dev)
-            print(device_name,'\n')
-            print('\n  Path:      ', dev.device_path)
-            print('\n  Instance:  ', dev.instance_id) 
-            print('\n  Port (ID): ', dev.get_parent_instance_id())
-            print('\n  Port (str):', str(dev.get_parent_device()))
+            output.write(device_name)
+            output.write('\n\n  Path:      %s\n' % dev.device_path)
+            output.write('\n  Instance:  %s\n' % dev.instance_id) 
+            output.write('\n  Port (ID): %s\n' % dev.get_parent_instance_id())
+            output.write('\n  Port (str):%s\n' % str(dev.get_parent_device()))
             #
-            print("Checking caps...")
-            print("-----------------")
+            output.write("Checking caps. ..\n")
+            output.write("-----------------\n")
             #
             try:
                 dev.open()
-                tools.write_documentation(dev, sys.stdout)
+                tools.write_documentation(dev, output)
             finally:
                 dev.close()
+        print("done!")
     else:
         print("There's not any non system HID class device available")
 #
 if __name__ == '__main__':
     simple_test()
+

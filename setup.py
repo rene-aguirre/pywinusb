@@ -8,7 +8,7 @@ except ImportError:
     sys.stdout.write("Setuptools or Distribute packages are required.") 
     sys.exit(1)
 
-VERSION = '0.3.1'
+VERSION = '0.3.2'
 README  = os.path.join(os.path.dirname(__file__), 'README.rst')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.rst')
 

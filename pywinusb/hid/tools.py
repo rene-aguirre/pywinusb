@@ -83,11 +83,11 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
             winapi.HidP_Output, winapi.HidP_Feature]:
         all_usages = self.usages_storage.get(report_kind, [])
         if all_usages:
-            print('*** %s Caps ***' % {
+            output_file.write('*** %s Caps ***' % {
                     winapi.HidP_Input   : "Input",
                     winapi.HidP_Output  : "Output",
                     winapi.HidP_Feature : "Feature"
                     }[report_kind])
             for usage_item in all_usages:
-                print(usage_item.inspect())
+                output_file.write(usage_item.inspect())
 
