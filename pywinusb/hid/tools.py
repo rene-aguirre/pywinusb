@@ -3,6 +3,7 @@
 Other helper functions.
 """
 from . import usage_pages, helpers, winapi
+from operator import attrgetter
 
 def write_documentation(self, output_file):
     "Issue documentation report on output_file file like object"
@@ -32,7 +33,7 @@ def write_documentation(self, output_file):
     dev_vars['main_usage_str'] = repr(
             usage_pages.HidUsage(self.hid_caps.usage_page, 
                 self.hid_caps.usage) )
-    output_file.write( """\
+    output_file.write( """\n\
 HID device documentation report
 ===============================
 
@@ -83,11 +84,49 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
             winapi.HidP_Output, winapi.HidP_Feature]:
         all_usages = self.usages_storage.get(report_kind, [])
         if all_usages:
-            output_file.write('*** %s Caps ***' % {
+            output_file.write('*** %s Caps ***\n\n' % {
                     winapi.HidP_Input   : "Input",
                     winapi.HidP_Output  : "Output",
                     winapi.HidP_Feature : "Feature"
                     }[report_kind])
+            # normalize usages to allow sorting by usage or min range value
+            for item in all_usages:
+                if getattr(item, 'usage', None) != None:
+                    item.flat_id = item.usage
+                elif getattr(item, 'usage_min', None) != None:
+                    item.flat_id = item.usage_min
+                else:
+                    item.flat_id = None
+            sorted(all_usages, key=attrgetter('usage_page', 'flat_id'))
             for usage_item in all_usages:
-                output_file.write(usage_item.inspect())
+                # remove helper attribute
+                del usage_item.flat_id
+
+                all_items = usage_item.inspect()
+                # sort first by 'usage_page'...
+                usage_page = all_items["usage_page"]
+                del all_items["usage_page"]
+                if "usage" in all_items:
+                    usage = all_items["usage"]
+                    output_file.write("    Usage {0} ({0:#x}), "\
+                            "Page {1:#x}\n".format(usage, usage_page))
+                    output_file.write("    ({0})\n".format(
+                        repr(usage_pages.HidUsage(usage_page, usage))) )
+                    del all_items["usage"]
+                elif 'usage_min' in all_items:
+                    usage = (all_items["usage_min"], all_items["usage_max"])
+                    output_file.write("    Usage Range {0}~{1} ({0:#x}~{1:#x}),"
+                            " Page {2:#x} ({3})\n".format(
+                                usage[0], usage[1], usage_page, 
+                                str(usage_pages.UsagePage(usage_page))) )
+                    del all_items["usage_min"]
+                    del all_items["usage_max"]
+                else:
+                    raise AttributeError("Expecting any usage id")
+                attribs = all_items.keys()
+                attribs.sort()
+                for key in attribs:
+                    output_file.write("{0}{1}: {2}\n".format(' '*8, 
+                        key, all_items[key]))
+                output_file.write('\n')
 

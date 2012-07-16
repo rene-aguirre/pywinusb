@@ -1518,17 +1518,17 @@ class HidPUsageCaps(object):
             pass
 
     def inspect(self):
-        """Retreive formatted '\\tField: Value\\n' attributes"""
-        results = []
+        """Retreive dictionary of 'Field: Value' attributes"""
+        results = {}
         for fname in dir(self):
             if not fname.startswith('_'):
                 value = getattr(self, fname)
                 if isinstance(value, collections.Callable):
                     continue
-                results.append("    %s: %s\n" % (fname, value))
-        return "".join( results )
+                results[fname] = value
+        return results
 
-def simple_test(target_vid = 0, target_pid = 0, output = None):
+def show_hids(target_vid = 0, target_pid = 0, output = None):
     """Check all HID devices conected to PC hosts."""
     # first be kind with local encodings
     import codecs, sys
@@ -1559,9 +1559,6 @@ def simple_test(target_vid = 0, target_pid = 0, output = None):
             output.write('\n  Instance:  %s\n' % dev.instance_id) 
             output.write('\n  Port (ID): %s\n' % dev.get_parent_instance_id())
             output.write('\n  Port (str):%s\n' % str(dev.get_parent_device()))
-            #
-            output.write("Checking caps. ..\n")
-            output.write("-----------------\n")
             #
             try:
                 dev.open()
