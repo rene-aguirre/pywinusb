@@ -6,7 +6,7 @@ from ctypes import Structure, Union, c_ubyte, c_long, c_ulong, c_ushort, \
         c_wchar, c_void_p, c_uint
 from ctypes import byref, POINTER, sizeof
 from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE, BOOL, \
-        WCHAR, LPWSTR, LPCWSTR, LPVOID
+        WCHAR, LPWSTR, LPCWSTR #, LPVOID
 #from core import HIDError
 from . import helpers
 import platform
@@ -170,17 +170,18 @@ SetupDiGetClassDevs.argtypes = [
     DWORD,   # __in      DWORD Flags
     ]
 
-SetupDiGetDeviceRegistryProperty = setup_api.SetupDiGetDeviceRegistryPropertyW
-SetupDiGetDeviceRegistryProperty.restype  = BOOL
-SetupDiGetDeviceRegistryProperty.argtypes = [
-    HANDLE,         # __in       HDEVINFO DeviceInfoSet,
-    POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
-    DWORD,          # __in       DWORD Property,
-    POINTER(DWORD), # __out_opt  PDWORD PropertyRegDataType,
-    LPVOID,         # __out_opt  PBYTE PropertyBuffer,
-    DWORD,          # __in       DWORD PropertyBufferSize,
-    POINTER(DWORD), # __out_opt  PDWORD RequiredSize
-    ]
+if 0:
+    SetupDiGetDeviceRegistryProperty = setup_api.SetupDiGetDeviceRegistryPropertyW
+    SetupDiGetDeviceRegistryProperty.restype  = BOOL
+    SetupDiGetDeviceRegistryProperty.argtypes = [
+        HANDLE,         # __in       HDEVINFO DeviceInfoSet,
+        POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
+        DWORD,          # __in       DWORD Property,
+        POINTER(DWORD), # __out_opt  PDWORD PropertyRegDataType,
+        LPVOID,         # __out_opt  PBYTE PropertyBuffer,
+        DWORD,          # __in       DWORD PropertyBufferSize,
+        POINTER(DWORD), # __out_opt  PDWORD RequiredSize
+        ]
 
 #structures for ctypes
 class DIGCF:
@@ -435,7 +436,7 @@ class DeviceInterfaceSetInfo(object):
         application should specify DIGCF.PRESENT and DIGCF.INTERFACEDEVICE
         in the Flags parameter passed to SetupDiGetClassDevs.
         """
-        self.h_info = SetupDiGetClassDevs(byref(self.guid), None, None,
+        self.h_info = SetupDiGetClassDevs(byref(self.guid), None, 0,
                 (DIGCF.PRESENT | DIGCF.DEVICEINTERFACE) )
 
         return self.h_info

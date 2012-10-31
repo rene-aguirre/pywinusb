@@ -5,6 +5,8 @@
 This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
+from __future__ import with_statement
+
 import sys
 import ctypes
 import threading
