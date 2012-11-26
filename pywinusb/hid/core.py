@@ -196,9 +196,8 @@ class HidDeviceFilter(object):
         validating_attributes = list(self.filter_params.keys())
 
         #first filter out restricted access devices
-        for item in results.keys():
-            if not item.is_active():
-                del results[item]
+        for item in [item for item in results.keys() if not resuts[item].is_active()]:
+            del results[item]
 
         #filter out
         for item in validating_attributes:
