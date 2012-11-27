@@ -196,8 +196,15 @@ class HidDeviceFilter(object):
         validating_attributes = list(self.filter_params.keys())
 
         #first filter out restricted access devices
-        for item in [item for item in results.keys() if not resuts[item].is_active()]:
-            del results[item]
+        if not len(results):
+            return {}
+
+        for device in list(results.keys()):
+            if not device.is_active():
+                del results[item]
+
+        if not len(results):
+            return {}
 
         #filter out
         for item in validating_attributes:
@@ -211,7 +218,7 @@ class HidDeviceFilter(object):
             elif item not in HidDevice.filter_attributes:
                 continue # field does not exist sys.error.write(...)
             #start filtering out
-            for device in results.keys():
+            for device in list(results.keys()):
                 if not hasattr(device, item):
                     del results[device]
                 elif item + "_mask" in validating_attributes:
@@ -1012,7 +1019,7 @@ class ReportItem(object):
         #verify it item is value array
         if self.__is_value:
             if self.__is_value_array:
-                byte_size = (caps_record.bit_size * caps_record.report_count)/8
+                byte_size = int((caps_record.bit_size * caps_record.report_count)/8)
                 if (caps_record.bit_size * caps_record.report_count) % 8: 
                     #remainder
                     byte_size += 1
@@ -1029,7 +1036,7 @@ class ReportItem(object):
         if not self.__is_value_array:
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
-            byte_index = (index * self.__bit_size) / 8
+            byte_index = int( (index * self.__bit_size) / 8 )
             bit_index  = (index * self.__bit_size) % 8
             bit_mask = ((1 << self.__bit_size) - 1)
             self.__value[byte_index] &= ~(bit_mask << bit_index)
@@ -1042,7 +1049,7 @@ class ReportItem(object):
         if not self.__is_value_array:
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
-            byte_index = (index * self.__bit_size) / 8
+            byte_index = int( (index * self.__bit_size) / 8 )
             bit_index = (index * self.__bit_size) % 8
             return ((self.__value[byte_index] >> bit_index) & \
                     ((1 << self.__bit_size) - 1) )
@@ -1530,7 +1537,7 @@ class HidPUsageCaps(object):
 def show_hids(target_vid = 0, target_pid = 0, output = None):
     """Check all HID devices conected to PC hosts."""
     # first be kind with local encodings
-    import codecs, sys
+    import codecs
     if not output:
         output = sys.stdout
     output = codecs.getwriter('mbcs')(output)
@@ -1568,6 +1575,4 @@ def show_hids(target_vid = 0, target_pid = 0, output = None):
     else:
         print("There's not any non system HID class device available")
 #
-if __name__ == '__main__':
-    simple_test()
 
