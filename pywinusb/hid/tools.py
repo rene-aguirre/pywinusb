@@ -126,7 +126,11 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
                 attribs = all_items.keys()
                 attribs.sort()
                 for key in attribs:
-                    output_file.write("{0}{1}: {2}\n".format(' '*8, 
-                        key, all_items[key]))
+                    if 'usage' in key:
+                        output_file.write("{0}{1}: {2} ({2:#x})\n".format(' '*8, 
+                            key, all_items[key]))
+                    else:
+                        output_file.write("{0}{1}: {2}\n".format(' '*8, 
+                            key, all_items[key]))
                 output_file.write('\n')
 

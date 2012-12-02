@@ -1,6 +1,11 @@
 Release changes
 ===============
 
+0.3.2
+-----
+
+ * Python 3 filtering fix
+
 0.3.1
 -----
 

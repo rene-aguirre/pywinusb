@@ -28,8 +28,7 @@ Depending on your application you might find these limitations
 
  * Windows only (so far...)
  
- * Not so fast top level interfacing. But you could still access, directly
-   your raw data reports.
+ * Maybe speed. I've had feedback by some users that speed is not a problem for high data throughput, but I think you might hit some Python limits if you are require any real time processing.
 
 Installation Instructions
 =========================
@@ -38,7 +37,7 @@ Windows
 -------
 
 The most convenient way of installing is using `easy_install` or `pip`, I
-recomend to do this once you are familiar with the library as you might loose
+recommend to do this once you are familiar with the library as you might loose
 track of the example source files, but you can take a look to the example or
 the source browsing the github repository.
 
@@ -59,7 +58,7 @@ View the `./examples` directory for some (ok, few right now) scripts. These
 show, for instance, how to use pywinusb.hid to handle events from HID class
 devices usages events.
 
-Gernal purpose instructions can be found on the `main project code page`_.
+Latest code and some Wiki information can be found on the `main project code page`_.
 
 .. _main project code page: https://github.com/rene-aguirre/pywinusb
 
