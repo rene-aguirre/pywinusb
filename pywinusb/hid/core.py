@@ -720,17 +720,16 @@ class HidDevice(HidDeviceBaseClass):
         old_values = report_template.get_usages()
         # parse incoming data
         report_template.set_raw_data(raw_report)
-        # get new data
-        new_values = report_template.get_usages()
-        # now diff
+        # and compare it
         event_applies = self.evt_decision
-        for key in new_values:
-            if key not in self.__evt_handlers:
+        evt_handlers  = self.__evt_handlers
+        for key in report_template.keys():
+            if key not in evt_handlers:
                 continue
             #check if event handler exist!
-            for event_kind, handlers in self.__evt_handlers[key].items():
+            for event_kind, handlers in evt_handlers[key].items():
                 #key=event_kind, values=handler set
-                new_value = new_values[key]
+                new_value = report_template[key].value
                 if not event_applies[event_kind](old_values[key], new_value):
                     continue
                 #decision applies, call handlers
