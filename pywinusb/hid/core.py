@@ -408,7 +408,7 @@ class HidDevice(HidDeviceBaseClass):
         if not hid_handle or hid_handle == INVALID_HANDLE_VALUE:
             raise HIDError("Error opening HID device: %s\n"%self.product_name)
         #get pre parsed data
-        ptr_preparsed_data = c_ulong()
+        ptr_preparsed_data = ctypes.c_void_p()
         if not hid_dll.HidD_GetPreparsedData(int(hid_handle), 
                 byref(ptr_preparsed_data)):
             winapi.CloseHandle(int(hid_handle))
