@@ -121,11 +121,8 @@ class HidPnPWindowMixin(wnd_hook_mixin.WndProcHookMixin):
     def _register_hid_notification(self):
         """Register HID notification events on any window (passed by window
         handler), returns a notification handler"""
-        #create structure
+        # create structure, self initialized
         notify_obj = DevBroadcastDevInterface()
-        #fill up
-        #ctypes.memset(ctypes.byref(notify_obj), 0, ctypes.sizeof(notify_obj))
-        notify_obj.prepare()
         h_notify = RegisterDeviceNotification(self.__hid_hwnd,
                 ctypes.byref(notify_obj), DEVICE_NOTIFY_WINDOW_HANDLE)
         #

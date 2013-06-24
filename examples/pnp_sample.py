@@ -35,6 +35,9 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
     def on_hid_pnp(self, hid_event = None):
         """This function will be called on per class event changes, so we need
         to test if our device has being connected or is just gone"""
+        # keep old reference for UI updates
+        old_device = self.device
+
         if hid_event:
             print("Hey, a hid device just %s!" % hid_event)
             
@@ -57,7 +60,7 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
             # poll for devices
             self.test_for_connection()
         # update ui
-        if old_Device != self.device:
+        if old_device != self.device:
             self.UpdateUsbStatus(False)
         
     def test_for_connection(self):
