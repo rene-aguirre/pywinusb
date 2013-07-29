@@ -1536,10 +1536,9 @@ class HidPUsageCaps(object):
 def show_hids(target_vid = 0, target_pid = 0, output = None):
     """Check all HID devices conected to PC hosts."""
     # first be kind with local encodings
-    import codecs
     if not output:
+        # beware your script should manage encodings
         output = sys.stdout
-    output = codecs.getwriter('mbcs')(output)
     # then the big cheese...
     from . import tools
     all_hids = None

@@ -31,7 +31,7 @@ def write_documentation(self, output_file):
                 return new_var
     dev_vars = vars(self)
     dev_vars['main_usage_str'] = repr(
-            usage_pages.HidUsage(self.hid_caps.usage_page, 
+            usage_pages.HidUsage(self.hid_caps.usage_page,
                 self.hid_caps.usage) )
     output_file.write( """\n\
 HID device documentation report
@@ -80,7 +80,7 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
 """ % CompundVarDict(dev_vars)) #better than vars()!
     #return
     # inspect caps
-    for report_kind in [winapi.HidP_Input, 
+    for report_kind in [winapi.HidP_Input,
             winapi.HidP_Output, winapi.HidP_Feature]:
         all_usages = self.usages_storage.get(report_kind, [])
         if all_usages:
@@ -117,20 +117,20 @@ Values:     %(hid_caps.number_feature_value_caps)d value(s)
                     usage = (all_items["usage_min"], all_items["usage_max"])
                     output_file.write("    Usage Range {0}~{1} ({0:#x}~{1:#x}),"
                             " Page {2:#x} ({3})\n".format(
-                                usage[0], usage[1], usage_page, 
+                                usage[0], usage[1], usage_page,
                                 str(usage_pages.UsagePage(usage_page))) )
                     del all_items["usage_min"]
                     del all_items["usage_max"]
                 else:
                     raise AttributeError("Expecting any usage id")
-                attribs = all_items.keys()
+                attribs = list( all_items.keys() )
                 attribs.sort()
                 for key in attribs:
                     if 'usage' in key:
-                        output_file.write("{0}{1}: {2} ({2:#x})\n".format(' '*8, 
+                        output_file.write("{0}{1}: {2} ({2:#x})\n".format(' '*8,
                             key, all_items[key]))
                     else:
-                        output_file.write("{0}{1}: {2}\n".format(' '*8, 
+                        output_file.write("{0}{1}: {2}\n".format(' '*8,
                             key, all_items[key]))
                 output_file.write('\n')
 

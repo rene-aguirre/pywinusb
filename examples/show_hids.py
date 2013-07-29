@@ -5,26 +5,18 @@
 """
 Show all HID devices information
 """
+import sys
 import pywinusb.hid as hid
 
-def encoding_hack():
-    "Setup display rough unicode decoder"
-    # first be kind with local encodings
-    import sys
-    if sys.version_info >= (3,):
-        # as is, don't handle unicodes
-        unicode = str
-        raw_input = input
-    else:
-        # allow to show encoded strings
-        import codecs
-        sys.stdout = codecs.getwriter('mbcs')(sys.stdout)
-    print_all()
-
-def print_all():
-    hid.core.show_hids()
-
 if __name__ == '__main__':
-    encoding_hack()
-    print_all()
+    if sys.version_info < (3,):
+        import codecs
+        output = codecs.getwriter('mbcs')(sys.stdout)
+    else:
+        # python3, you have to deal with encodings, try redirecting to any file
+        output = sys.stdout
+    try:
+        hid.core.show_hids(output = output)
+    except UnicodeEncodeError:
+        print("\nError: Can't manage encodings on terminal, try to run the script on PyScripter or IDLE")
 
