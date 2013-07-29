@@ -6,7 +6,7 @@ from ctypes import Structure, Union, c_ubyte, c_long, c_ulong, c_ushort, \
         c_wchar, c_void_p, c_uint
 from ctypes import byref, POINTER, sizeof
 from ctypes.wintypes import ULONG, BOOLEAN, BYTE, WORD, DWORD, HANDLE, BOOL, \
-        WCHAR, LPWSTR, LPCWSTR, LPVOID
+        WCHAR, LPWSTR, LPCWSTR
 #from core import HIDError
 from . import helpers
 import platform
@@ -177,7 +177,7 @@ SetupDiGetDeviceRegistryProperty.argtypes = [
     POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
     DWORD,          # __in       DWORD Property,
     POINTER(DWORD), # __out_opt  PDWORD PropertyRegDataType,
-    LPVOID,         # __out_opt  PBYTE PropertyBuffer,
+    POINTER(BYTE),  # __out_opt  PBYTE PropertyBuffer,
     DWORD,          # __in       DWORD PropertyBufferSize,
     POINTER(DWORD), # __out_opt  PDWORD RequiredSize
     ]
