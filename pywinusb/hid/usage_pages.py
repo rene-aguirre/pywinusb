@@ -1077,7 +1077,7 @@ class HidUsage(object):
                 return "%s device, %s usage" % (str(UsagePage(self.page_id)), 
                         page[self.usage_id][0])
             else:
-                return "%s device, Unknown usage" % str(UsagePage(page))
+                return "%s device, Unknown usage" % str(UsagePage(self.page_id))
         return "Unknown Page/usage"
         
 if __name__ == '__main__':
