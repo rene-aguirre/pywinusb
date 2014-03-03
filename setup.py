@@ -8,7 +8,7 @@ except ImportError:
     sys.stdout.write("Setuptools or Distribute packages are required.") 
     sys.exit(1)
 
-VERSION = '0.3.2'
+VERSION = '0.3.3'
 README  = os.path.join(os.path.dirname(__file__), 'README.rst')
 CHANGES = os.path.join(os.path.dirname(__file__), 'CHANGES.rst')
 
@@ -19,7 +19,7 @@ setup(name = 'pywinusb',
       description=("A package that simplifies USB/HID communications on windows"),
       long_description=long_description,
       classifiers=[
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Environment :: Win32 (MS Windows)",
         "Operating System :: Microsoft :: Windows",
         "Programming Language :: Python :: 2.7",

@@ -79,10 +79,8 @@ Feel free to contact me! use the `main code project page`_, just tell what do
 you think about the project or bring me anything you think might be cool to
 consider.
 
-Any participation it's appreciated, if you are willing to contribute but don't
-have any ideas or spare time, `feel free to donate`_.
+Any participation it's appreciated, feel free to contribute more examples or applications or just a reference to your open source project that uses the library.
 
 .. _main code project page: https://github.com/rene-aguirre/pywinusb
 
-.. _feel free to donate: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=4640085
 

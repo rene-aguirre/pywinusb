@@ -1,6 +1,11 @@
 Release changes
 ===============
 
+0.3.3
+-----
+
+ * Win7/64 fixes, PnP example fixed, show_hids.py now using local encodings, stdout encodings now not in library (should be part of applications), usage_pages.py UsagePage repr() fix.
+
 0.3.2
 -----
 
@@ -25,32 +30,20 @@ Release changes
 
  * Better Setup API device paths handling
 
-0.2.8
------
+<= 0.2.8
+--------
 
  * Fixed broken value array usages transactions
 
-0.2.7
------
-
  * Fixing sending output / feature reports
-
-0.2.6
------
 
  * Fixed broken input report handling
 
  * Stability improvements
 
-0.2.5
------
-
  * Tweaked PnP example, added frame closing event handler, so the USB device is closed
 
  * Report reading threads and device closing optimizations
-
-0.2.4
------
 
  * Fixed bugs preventing properly setting report usage variables after a HidReport().get()
 
@@ -60,18 +53,9 @@ Release changes
 
  * Fixed deadlock when device unplugged
 
-0.2.3
------
-
  * Added HidDevice.set_raw_data_handler(), and corresponding raw_data.py example script
 
-0.2.2
------
-
  * Fixing output only mode (no input report for forced open)
-
-0.2.1
------
 
  * Bringing a little bit of stability
 
