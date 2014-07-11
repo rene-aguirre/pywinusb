@@ -1020,7 +1020,7 @@ class ReportItem(object):
             if self.__is_value_array:
                 byte_size = int((caps_record.bit_size * caps_record.report_count)/8)
                 if (caps_record.bit_size * caps_record.report_count) % 8: 
-                    #remainder
+                    # TODO: This seems not supported by Windows
                     byte_size += 1
                 value_type = c_ubyte * byte_size
                 self.__value = value_type()

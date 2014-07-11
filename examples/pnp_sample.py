@@ -59,10 +59,11 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
         else:
             # poll for devices
             self.test_for_connection()
-        # update ui
+
         if old_device != self.device:
-            self.UpdateUsbStatus(False)
-        
+            # update ui
+            pass
+
     def test_for_connection(self):
         all_items =  MyFrame.my_hid_target.get_devices()
         if all_items:
