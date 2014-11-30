@@ -867,6 +867,7 @@ class HidDevice(HidDeviceBaseClass):
             threading.Thread.__init__(self)
             self.__abort = False
             self.hid_object = hid_object
+            self.daemon = True
             self.start()
 
         def abort(self):
@@ -900,6 +901,7 @@ class HidDevice(HidDeviceBaseClass):
             if hid_object and hid_handle and self.raw_report_size \
                     and self.report_queue:
                 #only if input reports are available
+                self.daemon = True
                 self.start()
             else:
                 hid_object.close()
