@@ -13,6 +13,7 @@ from . import wnd_hook_mixin
 from . import core
 from . import winapi
 
+WndProcHookMixin = wnd_hook_mixin.WndProcHookMixin
 #for PNP notifications
 class DevBroadcastDevInterface(ctypes.Structure):
     """DEV_BROADCAST_DEVICEINTERFACE ctypes structure wrapper"""
@@ -45,7 +46,7 @@ RegisterDeviceNotification = ctypes.windll.user32.RegisterDeviceNotificationW
 RegisterDeviceNotification.restype  = ctypes.wintypes.HANDLE
 RegisterDeviceNotification.argtypes = [
     ctypes.wintypes.HANDLE, 
-    ctypes.c_void_p,
+    ctypes.wintypes.LPVOID,
     DWORD
 ]
 
@@ -62,7 +63,7 @@ DBT_DEVTYP_HANDLE           = 0x00000006
 DEVICE_NOTIFY_WINDOW_HANDLE  = 0x00000000
 DEVICE_NOTIFY_SERVICE_HANDLE = 0x00000001
 
-class HidPnPWindowMixin(wnd_hook_mixin.WndProcHookMixin):
+class HidPnPWindowMixin(WndProcHookMixin):
     """Base for receiving PnP notifications.
     Just call HidPnPWindowMixin.__init__(my_hwnd) being
     my_hwnd the OS window handle (most GUI toolkits 
@@ -70,7 +71,7 @@ class HidPnPWindowMixin(wnd_hook_mixin.WndProcHookMixin):
     """
     def __init__(self, wnd_handle):
         """HidPnPWindowMixin initializer"""
-        wnd_hook_mixin.WndProcHookMixin.__init__(self, wnd_handle)
+        WndProcHookMixin.__init__(self, wnd_handle)
         self.__hid_hwnd = wnd_handle
         self.current_status = "unknown"
         #register hid notification msg handler
@@ -78,13 +79,14 @@ class HidPnPWindowMixin(wnd_hook_mixin.WndProcHookMixin):
         if not self.__h_notify:
             raise core.HIDError("PnP notification setup failed!")
         else:
-            self.add_msg_handler(WM_DEVICECHANGE, self._on_hid_pnp)
+            WndProcHookMixin.add_msg_handler(self, WM_DEVICECHANGE,
+                    self._on_hid_pnp)
             # add capability to filter out windows messages
-            self.hook_wnd_proc()
+            WndProcHookMixin.hook_wnd_proc(self)
     
     def unhook_wnd_proc(self):
         "This function must be called to clean up system resources"
-        wnd_hook_mixin.WndProcHookMixin.unhook_wnd_proc(self)
+        WndProcHookMixin.unhook_wnd_proc(self)
         if self.__h_notify:
             self._unregister_hid_notification() #ignore result
 

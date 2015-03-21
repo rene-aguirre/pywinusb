@@ -6,23 +6,45 @@ This is a modification of the original WndProcHookMixin by Kevin Moore,
 modified to use ctypes only instead of pywin32, so it can be used with no
 additional dependencies in Python 2.5
 """
+import platform
 import ctypes
-from ctypes import c_long, c_int
+from ctypes.wintypes import HANDLE, LPVOID, LONG, LPARAM, WPARAM, \
+    WINFUNCTYPE, UINT
 
-
-# It's probably not neccesary to make this distinction, 
-# but it never hurts to be safe
-SetWindowLong  = ctypes.windll.user32.SetWindowLongW
 CallWindowProc = ctypes.windll.user32.CallWindowProcW
+if platform.architecture()[0].startswith('64'):
+    CallWindowProc.restype  = LONG
+    CallWindowProc.argtypes = [
+        LPVOID, 
+        HANDLE,
+        UINT,
+        WPARAM,
+        LPARAM, 
+    ]
+
+    SetWindowLong  = ctypes.windll.user32.SetWindowLongPtrW
+    SetWindowLong.restype  = LPVOID
+    SetWindowLong.argtypes = [
+        HANDLE,
+        ctypes.c_int,
+        LPVOID, 
+    ]
+
+else:
+    SetWindowLong  = ctypes.windll.user32.SetWindowLongW
     
 GWL_WNDPROC = -4
 WM_DESTROY  = 2
 
 # Create a type that will be used to cast a python callable to a c callback 
 # function first arg is return type, the rest are the arguments
-WndProcType = ctypes.WINFUNCTYPE(c_int, c_long, c_int, c_int, c_int)
+if platform.architecture()[0].startswith('64'):
+    WndProcType = WINFUNCTYPE(LONG, HANDLE, UINT, WPARAM, LPARAM)
+else:
+    WndProcType = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_long, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int)
 
-class WndProcHookMixin:
+class WndProcHookMixin(object):
     """
     This class can be mixed in with any window class in order to hook it's
     WndProc function.  You supply a set of message handler functions with the
@@ -111,8 +133,8 @@ if __name__ == "__main__":
                 # getting events on window size changes and other standard
                 # windowing messages
                 WM_SIZE = 5
-                self.add_msg_handler(WM_SIZE, self.on_hooked_size)
-                self.hook_wnd_proc()
+                WndProcHookMixin.add_msg_handler(self, WM_SIZE, self.on_hooked_size)
+                WndProcHookMixin.hook_wnd_proc(self)
             
             def on_hooked_size(self, w_param, l_param):
                 """Custom WM_SIZE handler"""
