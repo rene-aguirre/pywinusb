@@ -8,8 +8,7 @@ additional dependencies in Python 2.5
 """
 import platform
 import ctypes
-from ctypes.wintypes import HANDLE, LPVOID, LONG, LPARAM, WPARAM, \
-    WINFUNCTYPE, UINT
+from ctypes.wintypes import HANDLE, LPVOID, LONG, LPARAM, WPARAM, UINT
 
 CallWindowProc = ctypes.windll.user32.CallWindowProcW
 if platform.architecture()[0].startswith('64'):
@@ -39,7 +38,7 @@ WM_DESTROY  = 2
 # Create a type that will be used to cast a python callable to a c callback 
 # function first arg is return type, the rest are the arguments
 if platform.architecture()[0].startswith('64'):
-    WndProcType = WINFUNCTYPE(LONG, HANDLE, UINT, WPARAM, LPARAM)
+    WndProcType = ctypes.WINFUNCTYPE(LONG, HANDLE, UINT, WPARAM, LPARAM)
 else:
     WndProcType = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_long, ctypes.c_int,
             ctypes.c_int, ctypes.c_int)

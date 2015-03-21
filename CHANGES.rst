@@ -1,12 +1,19 @@
 Release changes
 ===============
 
+0.3.6
+-----
+
+ * Working on python3.3 (broken on 0.3.5)
+
 0.3.5
 -----
+
  * Win7/64 PnP example fixed again (due ctypes and Windows 64 API changes).
 
 0.3.4
 -----
+
  * Jeff Rowberg (bluegiga) patch for deamon threads.
 
 0.3.3
