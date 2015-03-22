@@ -20,7 +20,7 @@ the convenience provided by working on top level usages allows a cleaner
 interface.
 """
 
-__version__ = '0.3.6'
+__version__ = '0.3.7'
 __author__  = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
 __url__     = 'https://github.com/rene-aguirre/pywinusb'
 __all__     = []

@@ -1,6 +1,11 @@
 Release changes
 ===============
 
+0.3.7
+-----
+
+ * Added PySide PnP example.
+
 0.3.6
 -----
 
