@@ -920,7 +920,6 @@ class HidDevice(HidDeviceBaseClass):
             return bool(self.__active)
 
         def run(self):
-            time.sleep(0.050) # this fixes an strange python threading bug
             if not self.raw_report_size:
                 # don't raise any error as the hid object can still be used 
                 # for writing reports
@@ -964,21 +963,26 @@ class HidDevice(HidDeviceBaseClass):
                             "device: %s"%(error, ctypes.FormatError(error)) )
                 if result == winapi.ERROR_IO_PENDING:
                     #wait for event
-                    if self.__abort:
-                        break
                     result = winapi.WaitForSingleObject( \
                         over_read.h_event, 
                         winapi.INFINITE )
                     if result != winapi.WAIT_OBJECT_0 or self.__abort: #success
+                        #Cancel the ReadFile call.  The read must not be in
+                        #progress when run() returns, since the buffers used
+                        #in the call will go out of scope and get freed.  If
+                        #new data arrives (the read finishes) after these
+                        #buffers have been freed then this can cause python
+                        #to crash.
+                        winapi.CancelIo( hid_object.hid_handle )
                         break #device has being disconnected
                 # signal raw data already read
                 input_report_queue.post( buf_report )
             #clean up
             self.__active = False
+            assert self.__abort #if abort is not set then an error occurred
             if not self.__abort:
                 # broadcast event
                 self.__abort = True
-                winapi.CancelIo( hid_object.hid_handle )
                 hid_object.close()
             winapi.CloseHandle(over_read.h_event)
             del over_read
