@@ -8,7 +8,6 @@ are available in the top level hid package
 import sys
 import ctypes
 import threading
-import time
 import collections
 if sys.version_info >= (3,):
     import winreg
@@ -613,16 +612,15 @@ class HidDevice(HidDeviceBaseClass):
             hid_dll.HidD_FreePreparsedData(ptr_preparsed_data)
 
         # wait for the reading thread to complete before closing device handle
-        while self.__reading_thread and self.__reading_thread.is_active():
-            time.sleep(0.050) # 50 ms latency, just to avoid CPU consumption
+        if self.__reading_thread:
+            self.__reading_thread.join()
 
         if self.hid_handle:
             winapi.CloseHandle(self.hid_handle)
         
         # make sure report procesing thread is closed
         if self.__input_processing_thread:
-            while self.__input_processing_thread.is_alive():
-                time.sleep(0.050)
+            self.__input_processing_thread.join()
 
         #reset vars (for GC)
         button_caps_storage = self.__button_caps_storage
@@ -897,7 +895,7 @@ class HidDevice(HidDeviceBaseClass):
             self.report_queue = hid_object._input_report_queue
             hid_handle = int( hid_object.hid_handle )
             self.raw_report_size = raw_report_size
-            self.__overlapped_read_obj = None
+            self.__h_read_event = None
             if hid_object and hid_handle and self.raw_report_size \
                     and self.report_queue:
                 #only if input reports are available
@@ -911,16 +909,15 @@ class HidDevice(HidDeviceBaseClass):
             if not self.__active:
                 return
             self.__abort = True
-            if self.is_alive() and self.__overlapped_read_obj:
+            if self.is_alive() and self.__h_read_event:
                 # force overlapped events competition
-                winapi.SetEvent(self.__overlapped_read_obj.h_event)
+                winapi.SetEvent(self.__h_read_event)
 
         def is_active(self):
             "main reading loop is running (bool)"
             return bool(self.__active)
 
         def run(self):
-            time.sleep(0.050) # this fixes an strange python threading bug
             if not self.raw_report_size:
                 # don't raise any error as the hid object can still be used 
                 # for writing reports
@@ -928,10 +925,9 @@ class HidDevice(HidDeviceBaseClass):
                     "capable HID device")
  
             over_read = winapi.OVERLAPPED()
-            over_read.h_event = winapi.CreateEvent(None, 0, 0, None)
-            if over_read.h_event:
-                self.__overlapped_read_obj = over_read
-            else:
+            self.__h_read_event = winapi.CreateEvent(None, 0, 0, None)
+            over_read.h_event = self.__h_read_event
+            if not over_read.h_event:
                 raise HIDError("Error when create hid event resource")
 
             bytes_read = c_ulong()
@@ -964,22 +960,28 @@ class HidDevice(HidDeviceBaseClass):
                             "device: %s"%(error, ctypes.FormatError(error)) )
                 if result == winapi.ERROR_IO_PENDING:
                     #wait for event
-                    if self.__abort:
-                        break
                     result = winapi.WaitForSingleObject( \
                         over_read.h_event, 
                         winapi.INFINITE )
                     if result != winapi.WAIT_OBJECT_0 or self.__abort: #success
+                        #Cancel the ReadFile call.  The read must not be in
+                        #progress when run() returns, since the buffers used
+                        #in the call will go out of scope and get freed.  If
+                        #new data arrives (the read finishes) after these
+                        #buffers have been freed then this can cause python
+                        #to crash.
+                        winapi.CancelIo( hid_object.hid_handle )
                         break #device has being disconnected
                 # signal raw data already read
                 input_report_queue.post( buf_report )
             #clean up
             self.__active = False
+            assert self.__abort #if abort is not set then an error occurred
             if not self.__abort:
                 # broadcast event
                 self.__abort = True
-                winapi.CancelIo( hid_object.hid_handle )
                 hid_object.close()
+            self.__h_read_event = None #delete read event so it isn't be used by abort()
             winapi.CloseHandle(over_read.h_event)
             del over_read
 
