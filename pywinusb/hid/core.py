@@ -895,7 +895,7 @@ class HidDevice(HidDeviceBaseClass):
             self.report_queue = hid_object._input_report_queue
             hid_handle = int( hid_object.hid_handle )
             self.raw_report_size = raw_report_size
-            self.__overlapped_read_obj = None
+            self.__h_read_event = None
             if hid_object and hid_handle and self.raw_report_size \
                     and self.report_queue:
                 #only if input reports are available
@@ -909,9 +909,9 @@ class HidDevice(HidDeviceBaseClass):
             if not self.__active:
                 return
             self.__abort = True
-            if self.is_alive() and self.__overlapped_read_obj:
+            if self.is_alive() and self.__h_read_event:
                 # force overlapped events competition
-                winapi.SetEvent(self.__overlapped_read_obj.h_event)
+                winapi.SetEvent(self.__h_read_event)
 
         def is_active(self):
             "main reading loop is running (bool)"
@@ -925,10 +925,9 @@ class HidDevice(HidDeviceBaseClass):
                     "capable HID device")
  
             over_read = winapi.OVERLAPPED()
-            over_read.h_event = winapi.CreateEvent(None, 0, 0, None)
-            if over_read.h_event:
-                self.__overlapped_read_obj = over_read
-            else:
+            self.__h_read_event = winapi.CreateEvent(None, 0, 0, None)
+            over_read.h_event = self.__h_read_event
+            if not over_read.h_event:
                 raise HIDError("Error when create hid event resource")
 
             bytes_read = c_ulong()
@@ -982,6 +981,7 @@ class HidDevice(HidDeviceBaseClass):
                 # broadcast event
                 self.__abort = True
                 hid_object.close()
+            self.__h_read_event = None #delete read event so it isn't be used by abort()
             winapi.CloseHandle(over_read.h_event)
             del over_read
 
