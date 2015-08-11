@@ -8,7 +8,6 @@ are available in the top level hid package
 import sys
 import ctypes
 import threading
-import time
 import collections
 if sys.version_info >= (3,):
     import winreg
@@ -613,16 +612,15 @@ class HidDevice(HidDeviceBaseClass):
             hid_dll.HidD_FreePreparsedData(ptr_preparsed_data)
 
         # wait for the reading thread to complete before closing device handle
-        while self.__reading_thread and self.__reading_thread.is_active():
-            time.sleep(0.050) # 50 ms latency, just to avoid CPU consumption
+        if self.__reading_thread:
+            self.__reading_thread.join()
 
         if self.hid_handle:
             winapi.CloseHandle(self.hid_handle)
         
         # make sure report procesing thread is closed
         if self.__input_processing_thread:
-            while self.__input_processing_thread.is_alive():
-                time.sleep(0.050)
+            self.__input_processing_thread.join()
 
         #reset vars (for GC)
         button_caps_storage = self.__button_caps_storage
