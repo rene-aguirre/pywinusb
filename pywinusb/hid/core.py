@@ -530,13 +530,30 @@ class HidDevice(HidDeviceBaseClass):
         over_write = winapi.OVERLAPPED()
         over_write.h_event = winapi.CreateEvent(None, 0, 0, None)
         if over_write.h_event:
-            overlapped_write = over_write
-            winapi.WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
-                None, byref(overlapped_write)) #none overlapped
-            result = winapi.WaitForSingleObject(overlapped_write.h_event, 10000 )
-            winapi.CloseHandle(overlapped_write.h_event)
-            if result != winapi.WAIT_OBJECT_0: #success
-                return False #device has being disconnected
+            try:
+                overlapped_write = over_write
+                winapi.WriteFile(int(self.hid_handle), byref(raw_data), len(raw_data),
+                    None, byref(overlapped_write)) #none overlapped
+                error = ctypes.GetLastError()
+                if error == winapi.ERROR_IO_PENDING:
+                    # overlapped operation in progress
+                    result = error
+                elif error == 1167:
+                    raise HIDError("Error device disconnected before write")
+                else:
+                    raise HIDError("Error %d when trying to write to HID "\
+                        "device: %s"%(error, ctypes.FormatError(error)) )
+                result = winapi.WaitForSingleObject(overlapped_write.h_event, 10000 )
+                if result != winapi.WAIT_OBJECT_0:
+                    # If the write times out make sure to
+                    # cancel it, otherwise memory could 
+                    # get corrupted if the async write
+                    # completes after this functions returns
+                    winapi.CancelIo( int(self.hid_handle) )
+                    raise HIDError("Write timed out")
+            finally:
+                # Make sure the event is closed so resources aren't leaked
+                winapi.CloseHandle(over_write.h_event)
         else:
             return winapi.WriteFile(int(self.hid_handle), byref(raw_data), 
                 len(raw_data),
