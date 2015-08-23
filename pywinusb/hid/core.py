@@ -913,6 +913,7 @@ class HidDevice(HidDeviceBaseClass):
             hid_handle = int( hid_object.hid_handle )
             self.raw_report_size = raw_report_size
             self.__h_read_event = None
+            self.__abort_lock = threading.RLock()
             if hid_object and hid_handle and self.raw_report_size \
                     and self.report_queue:
                 #only if input reports are available
@@ -923,12 +924,16 @@ class HidDevice(HidDeviceBaseClass):
 
         def abort(self):
             """Stop collectiong reports."""
-            if not self.__active:
-                return
-            self.__abort = True
-            if self.is_alive() and self.__h_read_event:
-                # force overlapped events competition
-                winapi.SetEvent(self.__h_read_event)
+            with self.__abort_lock:
+                if not self.__abort and self.__h_read_event:
+                    # force overlapped events competition
+
+                    # The abort variable must be set to true
+                    # before sending the event, otherwise
+                    # the reader thread might skip
+                    # CancelIo
+                    self.__abort = True
+                    winapi.SetEvent(self.__h_read_event)
 
         def is_active(self):
             "main reading loop is running (bool)"
@@ -946,61 +951,65 @@ class HidDevice(HidDeviceBaseClass):
             over_read.h_event = self.__h_read_event
             if not over_read.h_event:
                 raise HIDError("Error when create hid event resource")
-
-            bytes_read = c_ulong()
-            #
-            hid_object = self.hid_object
-            input_report_queue = self.report_queue
-            report_len = self.raw_report_size
-            #main loop active
-            self.__active = True
-            while not self.__abort:
-                #get storage
-                buf_report = input_report_queue.get_new()
-                if not buf_report or self.__abort:
-                    break
-                # async read from device
-                bytes_read.value = 0
-                result = winapi.ReadFile(hid_object.hid_handle, 
-                    byref(buf_report), report_len, byref(bytes_read), 
-                    byref(over_read) )
-                if not result:
-                    error = ctypes.GetLastError()
-                    if error == winapi.ERROR_IO_PENDING:
-                        # overlapped operation in progress
-                        result = error
-                    elif error == 1167:
-                        # device disconnected
+            try:
+                bytes_read = c_ulong()
+                #
+                hid_object = self.hid_object
+                input_report_queue = self.report_queue
+                report_len = self.raw_report_size
+                #main loop active
+                self.__active = True
+                while not self.__abort:
+                    #get storage
+                    buf_report = input_report_queue.get_new()
+                    if not buf_report or self.__abort:
                         break
-                    else:
-                        raise HIDError("Error %d when trying to read from HID "\
-                            "device: %s"%(error, ctypes.FormatError(error)) )
-                if result == winapi.ERROR_IO_PENDING:
-                    #wait for event
-                    result = winapi.WaitForSingleObject( \
-                        over_read.h_event, 
-                        winapi.INFINITE )
-                    if result != winapi.WAIT_OBJECT_0 or self.__abort: #success
-                        #Cancel the ReadFile call.  The read must not be in
-                        #progress when run() returns, since the buffers used
-                        #in the call will go out of scope and get freed.  If
-                        #new data arrives (the read finishes) after these
-                        #buffers have been freed then this can cause python
-                        #to crash.
-                        winapi.CancelIo( hid_object.hid_handle )
-                        break #device has being disconnected
-                # signal raw data already read
-                input_report_queue.post( buf_report )
-            #clean up
-            self.__active = False
-            assert self.__abort #if abort is not set then an error occurred
-            if not self.__abort:
-                # broadcast event
+                    bytes_read.value = 0
+
+                    with self.__abort_lock:
+                        # Call to ReadFile must only be done if
+                        # abort isn't set.
+                        if self.__abort:
+                            break
+                        # async read from device
+                        result = winapi.ReadFile(hid_object.hid_handle, 
+                            byref(buf_report), report_len, byref(bytes_read), 
+                            byref(over_read) )
+
+                    if not result:
+                        error = ctypes.GetLastError()
+                        if error == winapi.ERROR_IO_PENDING:
+                            # overlapped operation in progress
+                            result = error
+                        elif error == 1167:
+                            # device disconnected
+                            break
+                        else:
+                            raise HIDError("Error %d when trying to read from HID "\
+                                "device: %s"%(error, ctypes.FormatError(error)) )
+                    if result == winapi.ERROR_IO_PENDING:
+                        #wait for event
+                        result = winapi.WaitForSingleObject( \
+                            over_read.h_event, 
+                            winapi.INFINITE )
+                        if result != winapi.WAIT_OBJECT_0 or self.__abort: #success
+                            #Cancel the ReadFile call.  The read must not be in
+                            #progress when run() returns, since the buffers used
+                            #in the call will go out of scope and get freed.  If
+                            #new data arrives (the read finishes) after these
+                            #buffers have been freed then this can cause python
+                            #to crash.
+                            winapi.CancelIo( hid_object.hid_handle )
+                            break #device has being disconnected
+                    # signal raw data already read
+                    input_report_queue.post( buf_report )
+            finally:
+                #clean up
+                self.__active = False
                 self.__abort = True
-                hid_object.close()
-            self.__h_read_event = None #delete read event so it isn't be used by abort()
-            winapi.CloseHandle(over_read.h_event)
-            del over_read
+                self.__h_read_event = None #delete read event so it isn't be used by abort()
+                winapi.CloseHandle(over_read.h_event)
+                del over_read
 
     def __repr__(self):
         return "HID device (vID=0x%04x, pID=0x%04x, v=0x%04x); %s; %s, " \
