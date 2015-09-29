@@ -389,16 +389,19 @@ class HidDevice(HidDeviceBaseClass):
             return False
         return True
 
-    def open(self, output_only = False):
+    def open(self, output_only = False, shared = True):
         """Open HID device and obtain 'Collection Information'.
         It effectively prepares the HidDevice object for reading and writing
         """
         if self.is_opened():
             raise HIDError("Device already opened")
+        sharing_flags = 0
+        if shared:
+            sharing_flags = winapi.FILE_SHARE_READ | winapi.FILE_SHARE_WRITE
         hid_handle = winapi.CreateFile(
             self.device_path,
             winapi.GENERIC_READ | winapi.GENERIC_WRITE,
-            winapi.FILE_SHARE_READ | winapi.FILE_SHARE_WRITE,
+            sharing_flags,
             None, # no security
             winapi.OPEN_EXISTING,
             winapi.FILE_ATTRIBUTE_NORMAL | winapi.FILE_FLAG_OVERLAPPED,
