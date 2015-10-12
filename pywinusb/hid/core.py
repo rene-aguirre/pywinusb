@@ -724,7 +724,7 @@ class HidDevice(HidDeviceBaseClass):
             # but, this might have a collision with report_id = 0
             if not hid_device_path_exists(self.device_path):
                 #windows XP sends empty report when disconnecting
-                self.close() #device disconnected
+                self.__reading_thread.abort() #device disconnected
             return
 
         if self.__raw_handler:
