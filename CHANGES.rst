@@ -1,6 +1,11 @@
 Release changes
 ===============
 
+0.4.0
+-----
+
+ * pyOCD I/O fixes (contributed by `Russ Butler <https://github.com/c1728p9/>`_)
+
 0.3.7
 -----
 
