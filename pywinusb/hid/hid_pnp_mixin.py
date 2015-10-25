@@ -97,6 +97,9 @@ class HidPnPWindowMixin(WndProcHookMixin):
             # hid device attached
             notify_obj = None
             if int(l_param):
+                # Disable this error since pylint doesn't reconize
+                # that from_address actually exists
+                # pylint: disable=no-member
                 notify_obj = DevBroadcastDevInterface.from_address(l_param)
                 #confirm if the right message received
             if notify_obj and \
@@ -107,12 +110,15 @@ class HidPnPWindowMixin(WndProcHookMixin):
             # hid device removed
             notify_obj = None
             if int(l_param):
+                # Disable this error since pylint doesn't reconize
+                # that from_address actually exists
+                # pylint: disable=no-member
                 notify_obj = DevBroadcastDevInterface.from_address(l_param)
             if notify_obj and \
                     notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                 #only connect if already disconnected
                 new_status = "disconnected"
-                    
+
         #verify if need to call event handler
         if new_status != "unknown" and new_status != self.current_status:
             self.current_status = new_status

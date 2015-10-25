@@ -200,7 +200,7 @@ class HidDeviceFilter(object):
 
         for device in list(results.keys()):
             if not device.is_active():
-                del results[item]
+                del results[device]
 
         if not len(results):
             return {}

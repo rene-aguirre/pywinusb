@@ -3,6 +3,7 @@
 """Helper classs, functions and decorators"""
 import sys
 if sys.version_info >= (3,):
+    # pylint: disable=no-name-in-module
     from collections import UserList
 else:
     # python 2

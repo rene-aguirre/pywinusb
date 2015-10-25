@@ -127,6 +127,11 @@ if __name__ == "__main__":
                 wx.Frame.__init__(self, parent, -1, 
                         "Change my size and watch stdout",
                         size = frame_size)
+                # An error is reported here if wxPython isn't installed.
+                # Supress this error for automated testing since pxPython
+                # can't be installed through scripts since it is not in
+                # PyPi.
+                # pylint: disable=no-member
                 WndProcHookMixin.__init__(self, self.GetHandle())
                 # this is for demo purposes only, use the wxPython method for
                 # getting events on window size changes and other standard
@@ -142,6 +147,11 @@ if __name__ == "__main__":
 
         app = wx.App(False)
         frame = MyFrame(None)
+        # An error is reported here if wxPython isn't installed.
+        # Supress this error for automated testing since pxPython
+        # can't be installed through scripts since it is not in
+        # PyPi.
+        # pylint: disable=no-member
         frame.Show()
         app.MainLoop()
     demo_module()
