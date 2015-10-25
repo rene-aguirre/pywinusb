@@ -28,7 +28,7 @@ class WinApiException(Exception):
 def winapi_result( result ):
     """Validate WINAPI BOOL result, raise exception if failed"""
     if not result:
-        raise WinApiException("%d (%x): %s" % (ctypes.GetLastError(), 
+        raise WinApiException("%d (%x): %s" % (ctypes.GetLastError(),
                 ctypes.GetLastError(), ctypes.FormatError()))
     return result
 
@@ -52,7 +52,7 @@ WaitForSingleObject = kernel32.WaitForSingleObject
 c_tchar                         = c_wchar
 CreateFile                      = kernel32.CreateFileW
 CreateEvent                     = kernel32.CreateEventW
-    
+
 CM_Get_Device_ID                = setup_api.CM_Get_Device_IDW
 
 SetupDiEnumDeviceInfo           = setup_api.SetupDiEnumDeviceInfo
@@ -88,7 +88,7 @@ class OVERLAPPED(Structure):
         ("u",               OFFSET_OR_HANDLE),
         ("h_event",         HANDLE)
     ]
-    
+
 class SP_DEVICE_INTERFACE_DATA(Structure):
     """
     typedef struct _SP_DEVICE_INTERFACE_DATA {
@@ -120,7 +120,7 @@ class SP_DEVICE_INTERFACE_DETAIL_DATA(Structure):
     ]
     def get_string(self):
         """Retreive stored string"""
-        return ctypes.wstring_at(byref(self, sizeof(DWORD))) 
+        return ctypes.wstring_at(byref(self, sizeof(DWORD)))
 
 class SP_DEVINFO_DATA(Structure):
     """
@@ -138,7 +138,7 @@ class SP_DEVINFO_DATA(Structure):
             ("dev_inst",    DWORD),
             ("reserved",    POINTER(ULONG)),
     ]
-    
+
 
 SetupDiGetDeviceInterfaceDetail = setup_api.SetupDiGetDeviceInterfaceDetailW
 SetupDiGetDeviceInterfaceDetail.restype = BOOL
@@ -153,7 +153,7 @@ SetupDiGetDeviceInterfaceDetail.argtypes = [
     ]
 
 SetupDiGetDeviceInstanceId          = setup_api.SetupDiGetDeviceInstanceIdW
-SetupDiGetDeviceInstanceId.restype  = BOOL 
+SetupDiGetDeviceInstanceId.restype  = BOOL
 SetupDiGetDeviceInstanceId.argtypes = [
     HANDLE, # __in       HDEVINFO DeviceInfoSet,
     POINTER(SP_DEVINFO_DATA), # __in PSP_DEVINFO_DATA DeviceInfoData,
@@ -194,7 +194,7 @@ class DIGCF:
     ALLCLASSES      = 0x00000004
     PROFILE         = 0x00000008
     DEVICEINTERFACE = 0x00000010
-	
+
 #*******
 # hid.dll
 class HIDD_ATTRIBUTES(Structure):
@@ -261,7 +261,7 @@ class HIDP_BUTTON_CAPS(Structure):
         ("reserved", c_ulong * 10),
         ("union", RANGE_NOT_RANGE)
     ]
-            
+
 class HIDP_VALUE_CAPS(Structure):
     class RANGE_NOT_RANGE(Union):
         class RANGE(Structure):
@@ -283,7 +283,7 @@ class HIDP_VALUE_CAPS(Structure):
             ("range", RANGE),
             ("not_range", NOT_RANGE)
         ]
-        
+
     _fields_ = [
         ("usage_page", c_ushort),
         ("report_id", c_ubyte),
@@ -374,7 +374,7 @@ class HidStatus(object):
         HIDP_STATUS_REPORT_DOES_NOT_EXIST    : "report does not exist",
         HIDP_STATUS_NOT_IMPLEMENTED          : "not implemented"
     }
-        
+
     def __init__(self, error_code):
         error_code &= 0xFFFFFFFF
         self.error_code = error_code
@@ -496,4 +496,4 @@ def get_device_path(h_info, interface_data, ptr_info_data = None):
     return dev_inter_detail_data.get_string()
 
 
- 
+

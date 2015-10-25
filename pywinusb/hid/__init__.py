@@ -4,7 +4,7 @@
 ``pywinusb.hid`` -- A package that simplifies HID communications on Windows
 ---------------------------------------------------------------------------
 
-On Windows(TM), HID communications can be handled from user space 
+On Windows(TM), HID communications can be handled from user space
 applications, this means that no additional drivers are needed for simple
 HID interfacing.
 
@@ -26,7 +26,7 @@ __author__  = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
 __url__     = 'https://github.com/rene-aguirre/pywinusb'
 __all__     = []
 
-from . import core 
+from . import core
 get_full_usage_id      = core.get_full_usage_id
 get_usage_page_id      = core.get_usage_page_id
 get_short_usage_id     = core.get_short_usage_id

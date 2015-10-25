@@ -10,7 +10,7 @@ def read_values(target_usage):
     """read feature report values"""
     # browse all devices
     all_devices = hid.HidDeviceFilter().get_devices()
-    
+
     if not all_devices:
         print("Can't find any non system HID device connected")
     else:

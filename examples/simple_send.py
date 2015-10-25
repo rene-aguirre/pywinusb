@@ -11,13 +11,13 @@ def click_signal(target_usage, target_vendor_id):
     # usually you'll find and open the target device, here we'll browse for the
     # current connected devices
     all_devices = hid.HidDeviceFilter(vendor_id = target_vendor_id).get_devices()
-    
+
     if not all_devices:
         print("Can't find target device (vendor_id = 0x%04x)!" % target_vendor_id)
     else:
         # search for our target usage
         # target pageId, usageId
-             
+
         for device in all_devices:
             try:
                 device.open()
@@ -29,7 +29,7 @@ def click_signal(target_usage, target_vendor_id):
                         report[target_usage] = 1 # yes, changing values is that easy
                         # at this point you could change different usages at a time...
                         # and finally send the prepared output report
-                        report.send()               
+                        report.send()
                         # now toggle back the signal
                         report[target_usage] = 0
                         report.send()

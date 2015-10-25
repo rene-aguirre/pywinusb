@@ -24,7 +24,7 @@ class HidQtPnPWindowMixin(hid.HidPnPWindowMixin):
     pnpChanged = Signal(str)
     # hid connection/disconnection signal
     hidConnected = Signal(hid.HidDevice, str)
-    
+
     def __init__(self):
         # pass system window handle to trap PnP event
         getAsPtr = ctypes.pythonapi.PyCObject_AsVoidPtr
@@ -45,7 +45,7 @@ class HidQtPnPWindowMixin(hid.HidPnPWindowMixin):
 
         if hid_event:
             self.pnpChanged.emit(hid_event)
-            
+
         if hid_event == "connected":
             # test if our device is available
             if self.hid_device:
@@ -69,7 +69,7 @@ class HidQtPnPWindowMixin(hid.HidPnPWindowMixin):
                 self.hidConnected.emit(old_device, hid_event)
             else:
                 self.hidConnected.emit(self.hid_device, hid_event)
-        
+
     def test_for_connection(self):
         """ This funnction validates we have a valid HID target device
         connected, it could be extended to manage multiple HID devices
@@ -164,7 +164,7 @@ class HidPnPForm(QDialog, HidQtPnPWindowMixin):
 
         self.testButton.clicked.connect( self.on_test )
         self.finished.connect( self.on_close )
-        
+
         # custom hid signals
         self.pnpChanged.connect( self.on_pnp_changed )
         self.hidConnected.connect( self.on_connected )

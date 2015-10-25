@@ -17,11 +17,11 @@ CallWindowProc = ctypes.windll.user32.CallWindowProcW
 if platform.architecture()[0].startswith('64'):
     CallWindowProc.restype  = LONG
     CallWindowProc.argtypes = [
-        LPVOID, 
+        LPVOID,
         HANDLE,
         UINT,
         WPARAM,
-        LPARAM, 
+        LPARAM,
     ]
 
     SetWindowLong  = ctypes.windll.user32.SetWindowLongPtrW
@@ -29,16 +29,16 @@ if platform.architecture()[0].startswith('64'):
     SetWindowLong.argtypes = [
         HANDLE,
         ctypes.c_int,
-        LPVOID, 
+        LPVOID,
     ]
 
 else:
     SetWindowLong  = ctypes.windll.user32.SetWindowLongW
-    
+
 GWL_WNDPROC = -4
 WM_DESTROY  = 2
 
-# Create a type that will be used to cast a python callable to a c callback 
+# Create a type that will be used to cast a python callable to a c callback
 # function first arg is return type, the rest are the arguments
 if platform.architecture()[0].startswith('64'):
     WndProcType = ctypes.WINFUNCTYPE(LONG, HANDLE, UINT, WPARAM, LPARAM)
@@ -63,13 +63,13 @@ class WndProcHookMixin(object):
         self.__msg_dict = {}
         ## We need to maintain a reference to the WndProcType wrapper
         ## because ctypes doesn't
-        self.__local_wnd_proc_wrapped = None 
+        self.__local_wnd_proc_wrapped = None
         # keep window handle
         self.__local_win_handle = wnd_handle
         # empty class vars
         self.__local_wnd_proc_wrapped = None
         self.__old_wnd_proc           = None
-        
+
     def hook_wnd_proc(self):
         """Attach to OS Window message handler"""
         self.__local_wnd_proc_wrapped = WndProcType(self.local_wnd_proc)
@@ -83,7 +83,7 @@ class WndProcHookMixin(object):
         SetWindowLong(self.__local_win_handle,
                         GWL_WNDPROC,
                         self.__old_wnd_proc)
-        
+
         ## Allow the ctypes wrapper to be garbage collected
         self.__local_wnd_proc_wrapped = None
 
@@ -112,7 +112,7 @@ class WndProcHookMixin(object):
 
         return CallWindowProc(self.__old_wnd_proc,
                                 h_wnd, msg, w_param, l_param)
-                                
+
 # a simple example
 if __name__ == "__main__":
     def demo_module():
@@ -127,7 +127,7 @@ if __name__ == "__main__":
             """Demo frame"""
             def __init__(self, parent):
                 frame_size = wx.Size(640, 480)
-                wx.Frame.__init__(self, parent, -1, 
+                wx.Frame.__init__(self, parent, -1,
                         "Change my size and watch stdout",
                         size = frame_size)
                 # An error is reported here if wxPython isn't installed.
@@ -142,7 +142,7 @@ if __name__ == "__main__":
                 WM_SIZE = 5
                 WndProcHookMixin.add_msg_handler(self, WM_SIZE, self.on_hooked_size)
                 WndProcHookMixin.hook_wnd_proc(self)
-            
+
             def on_hooked_size(self, w_param, l_param):
                 """Custom WM_SIZE handler"""
                 print("WM_SIZE [WPARAM:%i][LPARAM:%i]" % (w_param, l_param))

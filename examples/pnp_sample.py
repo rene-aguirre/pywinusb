@@ -21,17 +21,17 @@ target_product_id = 0x0001
 class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
     # a device so we could easily discriminate wich devices to look at
     my_hid_target = hid.HidDeviceFilter(vendor_id = target_vendor_id, product_id = target_product_id)
-    
+
     def __init__(self,parent):
         wx.Frame.__init__(self,parent,-1,
                 "Re-plug your USB HID device, watch the command window!...")
         hid.HidPnPWindowMixin.__init__(self, self.GetHandle())
         wx.EVT_CLOSE(self, self.on_close)
         self.device = None #no hid device... yet
-        
+
         # kick the pnp engine
         self.on_hid_pnp()
-        
+
     def on_hid_pnp(self, hid_event = None):
         """This function will be called on per class event changes, so we need
         to test if our device has being connected or is just gone"""
@@ -40,7 +40,7 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
 
         if hid_event:
             print("Hey, a hid device just %s!" % hid_event)
-            
+
         if hid_event == "connected":
             # test if our device is available
             if self.device:
@@ -112,7 +112,7 @@ class MyFrame(wx.Frame,hid.HidPnPWindowMixin):
         event.Skip()
         if self.device:
             self.device.close()
-            
+
 if __name__ == "__main__":
     app = wx.App(False)
     frame = MyFrame(None)

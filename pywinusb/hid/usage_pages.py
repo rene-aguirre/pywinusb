@@ -56,7 +56,7 @@ class UsagePage(object):
         (0x92, 0xFEFF, "Reserved"),
         (0xFF00, 0xFFFF, "Vendor-defined"),
         ]
-    
+
     def __init__(self, page):
         if isinstance(page, str):
             if page not in self.__usage_map_string_keys:
@@ -67,7 +67,7 @@ class UsagePage(object):
         else:
             raise TypeError("Usage page referenced only by name (str) or value (int)")
         self.page = page
-        
+
     def __int__(self):
         if isinstance(self.page, str):
             name = self.page
@@ -77,7 +77,7 @@ class UsagePage(object):
             return 0
         # return name
         return self.__usage_map_string_keys.get(name, 0)
-    
+
     def __str__(self):
         if isinstance(self.page, str):
             return self.page
@@ -90,14 +90,14 @@ class UsagePage(object):
                     if low_limit <= self.page <= high_limit:
                         return name
         return ""
-            
+
 # ***********************************
 #
 #
 [   CP,
     CA,
     DV,
-    CL, 
+    CL,
     OSC,
     OOC,
     DV,
@@ -114,7 +114,7 @@ class UsagePage(object):
     SF,
     BUFFEREDBYTES,
 ] = list(range(19))
-    
+
 class HidUsage(object):
     """\
     usage tables
@@ -1072,17 +1072,17 @@ class HidUsage(object):
     def __init__(self, page_id, usage_id):
         self.page_id = page_id
         self.usage_id = usage_id
-        
+
     def __repr__(self):
         if self.page_id in self.Usages:
             page = self.Usages[self.page_id]
             if self.usage_id in page:
-                return "%s device, %s usage" % (str(UsagePage(self.page_id)), 
+                return "%s device, %s usage" % (str(UsagePage(self.page_id)),
                         page[self.usage_id][0])
             else:
                 return "%s device, Unknown usage" % str(UsagePage(self.page_id))
         return "Unknown Page/usage"
-        
+
 if __name__ == '__main__':
     #simple testing
     PAGES = [
