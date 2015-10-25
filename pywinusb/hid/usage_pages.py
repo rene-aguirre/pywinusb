@@ -4,6 +4,9 @@
 """
 Standar HID usage page definitions
 """
+from __future__ import absolute_import
+from __future__ import print_function
+
 #
 class UsagePage(object):
     """Translate usage name between numeric and string values.

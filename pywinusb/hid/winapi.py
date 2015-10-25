@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 import ctypes
 from ctypes import Structure, Union, c_ubyte, c_long, c_ulong, c_ushort, \

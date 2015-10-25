@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 """Helper classs, functions and decorators"""
+from __future__ import absolute_import
+from __future__ import print_function
+
 import sys
 if sys.version_info >= (3,):
     # pylint: disable=no-name-in-module

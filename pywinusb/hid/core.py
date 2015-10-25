@@ -5,6 +5,9 @@
 This is the main module, the main interface classes and functions
 are available in the top level hid package
 """
+from __future__ import absolute_import
+from __future__ import print_function
+
 import sys
 import ctypes
 import threading
@@ -1051,7 +1054,7 @@ class ReportItem(object):
         #verify it item is value array
         if self.__is_value:
             if self.__is_value_array:
-                byte_size = int((caps_record.bit_size * caps_record.report_count)/8)
+                byte_size = int((caps_record.bit_size * caps_record.report_count)//8)
                 if (caps_record.bit_size * caps_record.report_count) % 8: 
                     # TODO: This seems not supported by Windows
                     byte_size += 1
@@ -1068,7 +1071,7 @@ class ReportItem(object):
         if not self.__is_value_array:
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
-            byte_index = int( (index * self.__bit_size) / 8 )
+            byte_index = int( (index * self.__bit_size) // 8 )
             bit_index  = (index * self.__bit_size) % 8
             bit_mask = ((1 << self.__bit_size) - 1)
             self.__value[byte_index] &= ~(bit_mask << bit_index)
@@ -1081,7 +1084,7 @@ class ReportItem(object):
         if not self.__is_value_array:
             raise ValueError("Report item is not value usage array")
         if index < self.__report_count:
-            byte_index = int( (index * self.__bit_size) / 8 )
+            byte_index = int( (index * self.__bit_size) // 8 )
             bit_index = (index * self.__bit_size) % 8
             return ((self.__value[byte_index] >> bit_index) & \
                     ((1 << self.__bit_size) - 1) )

@@ -6,6 +6,9 @@ This is a modification of the original WndProcHookMixin by Kevin Moore,
 modified to use ctypes only instead of pywin32, so it can be used with no
 additional dependencies in Python 2.5
 """
+from __future__ import absolute_import
+from __future__ import print_function
+
 import platform
 import ctypes
 from ctypes.wintypes import HANDLE, LPVOID, LONG, LPARAM, WPARAM, UINT

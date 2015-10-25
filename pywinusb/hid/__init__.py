@@ -19,6 +19,7 @@ Still ``pywinusb.hid`` allows to work at the low 'raw report' level, but
 the convenience provided by working on top level usages allows a cleaner
 interface.
 """
+from __future__ import absolute_import
 
 __version__ = '0.4.0'
 __author__  = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
