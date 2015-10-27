@@ -5,7 +5,7 @@ import os, sys
 try:
     from setuptools import setup, find_packages
 except ImportError:
-    sys.stdout.write("Setuptools or Distribute packages are required.") 
+    sys.stdout.write("Setuptools or Distribute packages are required.")
     sys.exit(1)
 
 VERSION = '0.4.0'

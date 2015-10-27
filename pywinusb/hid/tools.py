@@ -2,6 +2,8 @@
 """
 Other helper functions.
 """
+from __future__ import absolute_import
+
 from . import usage_pages, helpers, winapi
 from operator import attrgetter
 

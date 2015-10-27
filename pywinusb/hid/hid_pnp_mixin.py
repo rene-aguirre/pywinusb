@@ -7,6 +7,9 @@ Plug and Play nottifications are sent only to Window devices
 So regardless of the GUI toolkit used, the Mixin' classes
 expose here can be used.
 """
+from __future__ import absolute_import
+from __future__ import print_function
+
 import ctypes
 from ctypes.wintypes import DWORD
 from . import wnd_hook_mixin
@@ -19,9 +22,9 @@ class DevBroadcastDevInterface(ctypes.Structure):
     """DEV_BROADCAST_DEVICEINTERFACE ctypes structure wrapper"""
     _fields_ = [
         # size of the members plus the actual length of the dbcc_name string
-        ("dbcc_size",       DWORD), 
+        ("dbcc_size",       DWORD),
         ("dbcc_devicetype", DWORD),
-        ("dbcc_reserved",   DWORD), 
+        ("dbcc_reserved",   DWORD),
         ("dbcc_classguid",  winapi.GUID),
         ("dbcc_name",       ctypes.c_wchar),
     ]
@@ -40,12 +43,12 @@ DBT_CONFIGCHANGED   = 0x0018
 # Device or piece of media has been inserted and is now available.
 DBT_DEVICEARRIVAL   = 0x8000
 # Device or piece of media has been removed.
-DBT_DEVICEREMOVECOMPLETE = 0x8004 
+DBT_DEVICEREMOVECOMPLETE = 0x8004
 
 RegisterDeviceNotification = ctypes.windll.user32.RegisterDeviceNotificationW
 RegisterDeviceNotification.restype  = ctypes.wintypes.HANDLE
 RegisterDeviceNotification.argtypes = [
-    ctypes.wintypes.HANDLE, 
+    ctypes.wintypes.HANDLE,
     ctypes.wintypes.LPVOID,
     DWORD
 ]
@@ -66,7 +69,7 @@ DEVICE_NOTIFY_SERVICE_HANDLE = 0x00000001
 class HidPnPWindowMixin(WndProcHookMixin):
     """Base for receiving PnP notifications.
     Just call HidPnPWindowMixin.__init__(my_hwnd) being
-    my_hwnd the OS window handle (most GUI toolkits 
+    my_hwnd the OS window handle (most GUI toolkits
     allow to get the system window handle).
     """
     def __init__(self, wnd_handle):
@@ -83,7 +86,7 @@ class HidPnPWindowMixin(WndProcHookMixin):
                     self._on_hid_pnp)
             # add capability to filter out windows messages
             WndProcHookMixin.hook_wnd_proc(self)
-    
+
     def unhook_wnd_proc(self):
         "This function must be called to clean up system resources"
         WndProcHookMixin.unhook_wnd_proc(self)
@@ -97,6 +100,9 @@ class HidPnPWindowMixin(WndProcHookMixin):
             # hid device attached
             notify_obj = None
             if int(l_param):
+                # Disable this error since pylint doesn't reconize
+                # that from_address actually exists
+                # pylint: disable=no-member
                 notify_obj = DevBroadcastDevInterface.from_address(l_param)
                 #confirm if the right message received
             if notify_obj and \
@@ -107,19 +113,22 @@ class HidPnPWindowMixin(WndProcHookMixin):
             # hid device removed
             notify_obj = None
             if int(l_param):
+                # Disable this error since pylint doesn't reconize
+                # that from_address actually exists
+                # pylint: disable=no-member
                 notify_obj = DevBroadcastDevInterface.from_address(l_param)
             if notify_obj and \
                     notify_obj.dbcc_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
                 #only connect if already disconnected
                 new_status = "disconnected"
-                    
+
         #verify if need to call event handler
         if new_status != "unknown" and new_status != self.current_status:
             self.current_status = new_status
             self.on_hid_pnp(self.current_status)
         #
         return True
-        
+
     def _register_hid_notification(self):
         """Register HID notification events on any window (passed by window
         handler), returns a notification handler"""
@@ -137,7 +146,7 @@ class HidPnPWindowMixin(WndProcHookMixin):
         result          = UnregisterDeviceNotification(self.__h_notify)
         self.__h_notify = None
         return int(result)
-        
+
     def on_hid_pnp(self, new_status):
         "'Virtual' like function to refresh update for connection status"
         print("HID:", new_status)
