@@ -1041,8 +1041,8 @@ class ReportItem(object):
         self.page_id = caps_record.usage_page
         self.__value = 0
         if caps_record.is_range:
-            #reference to usage within usage ange
-            offset = caps_record.usage_min - usage_id
+            #reference to usage within usage range
+            offset = usage_id - caps_record.usage_min 
             self.data_index = caps_record.data_index_min + offset
             self.string_index = caps_record.string_min + offset
             self.designator_index = caps_record.designator_min + offset
