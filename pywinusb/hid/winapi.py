@@ -46,7 +46,6 @@ CloseHandle.restype = BOOL
 CloseHandle.argtypes = [HANDLE]
 SetEvent            = kernel32.SetEvent
 WaitForSingleObject = kernel32.WaitForSingleObject
-#SetupDiGetDeviceInstanceId = setup_api.SetupDiGetDeviceInstanceId
 
 #os dependant functions and definitions
 c_tchar                         = c_wchar
@@ -55,9 +54,6 @@ CreateEvent                     = kernel32.CreateEventW
 
 CM_Get_Device_ID                = setup_api.CM_Get_Device_IDW
 
-SetupDiEnumDeviceInfo           = setup_api.SetupDiEnumDeviceInfo
-SetupDiEnumDeviceInterfaces     = setup_api.SetupDiEnumDeviceInterfaces
-SetupDiDestroyDeviceInfoList    = setup_api.SetupDiDestroyDeviceInfoList
 
 b_verbose = True
 usb_verbose = False
@@ -181,6 +177,22 @@ SetupDiGetDeviceRegistryProperty.argtypes = [
     POINTER(BYTE),  # __out_opt  PBYTE PropertyBuffer,
     DWORD,          # __in       DWORD PropertyBufferSize,
     POINTER(DWORD), # __out_opt  PDWORD RequiredSize
+    ]
+
+SetupDiDestroyDeviceInfoList = setup_api.SetupDiDestroyDeviceInfoList
+SetupDiDestroyDeviceInfoList.restype = BOOL
+SetupDiDestroyDeviceInfoList.argtypes = [
+    HANDLE, # __in       HDEVINFO DeviceInfoSet,
+    ]
+
+SetupDiEnumDeviceInterfaces = setup_api.SetupDiEnumDeviceInterfaces
+SetupDiEnumDeviceInterfaces.restype = BOOL
+SetupDiEnumDeviceInterfaces.argtypes = [
+    HANDLE,                     # _In_ HDEVINFO DeviceInfoSet,
+    POINTER(SP_DEVINFO_DATA),   # _In_opt_ PSP_DEVINFO_DATA DeviceInfoData,
+    POINTER(GUID),              # _In_ const GUIDi *InterfaceClassGuid,
+    DWORD,                      # _In_ DWORD MemberIndex,
+    POINTER(SP_DEVICE_INTERFACE_DATA), # _Out_ PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData
     ]
 
 #structures for ctypes
@@ -449,7 +461,7 @@ class DeviceInterfaceSetInfo(object):
         """Destroy allocated storage"""
         if self.h_info and self.h_info != INVALID_HANDLE_VALUE:
             # clean up
-            setup_api.SetupDiDestroyDeviceInfoList(self.h_info)
+            SetupDiDestroyDeviceInfoList(self.h_info)
         self.h_info = None
 
 def enum_device_interfaces(h_info, guid):
@@ -460,7 +472,7 @@ def enum_device_interfaces(h_info, guid):
     dev_interface_data.cb_size = sizeof(dev_interface_data)
 
     device_index = 0
-    while setup_api.SetupDiEnumDeviceInterfaces(h_info,
+    while SetupDiEnumDeviceInterfaces(h_info,
             None,
             byref(guid),
             device_index,
