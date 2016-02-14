@@ -6,11 +6,10 @@ from __future__ import print_function
 
 import sys
 if sys.version_info >= (3,):
-    # pylint: disable=no-name-in-module
-    from collections import UserList
+    from collections import UserList  # pylint: disable=no-name-in-module
 else:
     # python 2
-    from UserList import UserList
+    from UserList import UserList  # pylint: disable=import-error
 
 class HIDError(Exception):
     "Main HID error exception class type"
