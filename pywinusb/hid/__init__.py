@@ -21,7 +21,7 @@ interface.
 """
 from __future__ import absolute_import
 
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 __author__  = 'Rene F. Aguirre <rene.f.aguirre@gmail.com>'
 __url__     = 'https://github.com/rene-aguirre/pywinusb'
 __all__     = []

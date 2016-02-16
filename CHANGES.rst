@@ -1,6 +1,10 @@
 Release changes
 ===============
 
+0.4.1
+-----
+ * Patched ctypes issue on Python 3.5.1 64 bits.
+
 0.4.0
 -----
 
