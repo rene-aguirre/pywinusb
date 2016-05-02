@@ -1,9 +1,14 @@
 Release changes
 ===============
 
+[Next release]
+
+ * Fixed issue #33. Allow to read totally unparsed reports.
+
 0.4.1
 -----
- * Patched ctypes issue on Python 3.5.1 64 bits.
+
+* Patched ctypes issue on Python 3.5.1 64 bits.
 
 0.4.0
 -----

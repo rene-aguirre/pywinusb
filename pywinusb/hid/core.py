@@ -1500,7 +1500,7 @@ class HidReport(object):
 
     def get(self, do_process_raw_report = True):
         "Read report from device"
-        assert( self.__hid_object.is_opened() )
+        assert(self.__hid_object.is_opened())
         if self.__report_kind != HidP_Input and \
                 self.__report_kind != HidP_Feature:
             raise HIDError("Only for input or feature reports")
@@ -1515,12 +1515,11 @@ class HidReport(object):
             read_function = hid_dll.HidD_GetFeature
         elif self.__report_kind == HidP_Input:
             read_function = hid_dll.HidD_GetInputReport
-        if read_function and read_function( \
-                int(self.__hid_object.hid_handle),
-                byref(raw_data), len(raw_data) ):
+        if read_function and read_function(int(self.__hid_object.hid_handle),
+                                           byref(raw_data), len(raw_data)):
             #success
-            self.set_raw_data(raw_data)
             if do_process_raw_report:
+                self.set_raw_data(raw_data)
                 self.__hid_object._process_raw_report(raw_data)
             return helpers.ReadOnlyList(raw_data)
         return helpers.ReadOnlyList([])
