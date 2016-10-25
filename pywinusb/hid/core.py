@@ -931,15 +931,15 @@ class HidDevice(HidDeviceBaseClass):
         def abort(self):
             """Stop collectiong reports."""
             with self.__abort_lock:
-                if not self.__abort and self.__h_read_event:
-                    # force overlapped events competition
-
+                if not self.__abort:
                     # The abort variable must be set to true
                     # before sending the event, otherwise
                     # the reader thread might skip
                     # CancelIo
                     self.__abort = True
-                    winapi.SetEvent(self.__h_read_event)
+                    if self.__h_read_event:
+                        # force overlapped events competition
+                        winapi.SetEvent(self.__h_read_event)
 
         def is_active(self):
             "main reading loop is running (bool)"
