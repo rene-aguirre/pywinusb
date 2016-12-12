@@ -5,6 +5,13 @@ Release changes
 
  * Fixed issue #33. Allow to read totally unparsed reports.
 
+0.4.2
+-----
+
+* Issue #33.
+
+* PR #39. Intermittent lockup on close.
+
 0.4.1
 -----
 
