@@ -5,3 +5,4 @@ build/
 v_env/
 *.egg-info/
 .tox
+examples/show_hids_RESULTS.txt
