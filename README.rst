@@ -44,10 +44,10 @@ come back and take a look at the examples or the source browsing the
 github repository here.  
 
 | **pip install commands:**  
-| For Python 2: ``pip install pywinusb``, or ``py -2 -m pip install pywinusb``    
-| For Python 3: ``py -3 -m pip install pywinusb``  
-
-If using a source package (.zip) from PyPi, un-zip your file (or get the source  
+| *For Python 2:* ``pip install pywinusb``, or ``py -2 -m pip install pywinusb``    
+| *For Python 3:* ``py -3 -m pip install pywinusb``  
+| 
+| If using a source package (.zip) from PyPi, un-zip your file (or get the source  
 from the main repository) and run the familiar `setup.py install` command  
 from the command line, as this is sufficient. Note that setuptools or distribute  
 (for python 3) are required.  
