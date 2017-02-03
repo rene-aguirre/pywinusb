@@ -36,20 +36,28 @@ Installation Instructions
 Windows
 -------
 
-The most convenient way of installing is using `easy_install` or `pip`, I
-recommend to do this once you are familiar with the library as you might loose
-track of the example source files, but you can take a look to the example or
-the source browsing the github repository.
+The most convenient way of installing is using ``easy_install`` or ``pip`` 
+(see below for ``pip`` install commands in Windows). I recommend you do  
+this once you are familiar with the library as you might otherwise  
+loose track of the example source files. However, you can always  
+come back and take a look at the examples or the source browsing the  
+github repository here.  
 
-If using a source package (.zip) from PyPi un-zip your file, or get the source
-from the main repository and run the familiar `setup.py install` command line
-is sufficient, setuptools or distribute (for python 3) are required.
+| **pip install commands:**  
+| *For Python 2:* ``pip install pywinusb``, or ``py -2 -m pip install pywinusb``    
+| *For Python 3:* ``py -3 -m pip install pywinusb``  
+| (More on pip installation instructions here: https://docs.python.org/3/installing/)
+| 
+| If using a source package (.zip) from PyPi, un-zip your file (or get the source  
+from the main repository) and run the familiar `setup.py install` command  
+from the command line, as this is sufficient. Note that setuptools or distribute  
+(for python 3) are required.  
 
 
-Other
+Other  
 -----
 
-So far only Windows OS it's supported.
+So far only Windows OS it's supported.  
 
 Using pywinusb.hid
 ==================
