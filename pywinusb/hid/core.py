@@ -1489,8 +1489,8 @@ class HidReport(object):
                 issubclass(raw_data._type_, c_ubyte) ):
             # pre-memory allocation for performance
             self.__alloc_raw_data(raw_data)
-        #reference proper object
-        raw_data = self.__raw_data
+            # reference proper object
+            raw_data = self.__raw_data
         if self.__report_kind == HidP_Output:
             return self.__hid_object.send_output_report(raw_data)
         elif self.__report_kind == HidP_Feature:
