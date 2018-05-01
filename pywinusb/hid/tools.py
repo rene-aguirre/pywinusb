@@ -43,7 +43,7 @@ Top Level Details
 -----------------
 
 Manufacturer String:    %(vendor_name)s
-Product Sting:          %(product_name)s
+Product String:          %(product_name)s
 Serial Number:          %(serial_number)s
 
 Vendor ID:              0x%(vendor_id)04x
