@@ -1,2 +1,2 @@
 pyside
-
+device manager hwid list
