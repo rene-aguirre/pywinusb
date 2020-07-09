@@ -1222,7 +1222,7 @@ class HidReport(object):
                         self.__value_array_items.append(report_item)
                 else:
                     for usage_id in range(item.usage_min,
-                            item.usage_max):
+                            item.usage_max+1):
                         report_item =  ReportItem(self, item, usage_id)
                         self.__items[report_item.key()] = report_item
                         self.__idx_items[report_item.data_index] = report_item
