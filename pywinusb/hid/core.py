@@ -14,6 +14,7 @@ import threading
 import collections
 if sys.version_info >= (3,):
     import winreg
+    collections.Callable = collections.abc.Callable
 else:
     import _winreg as winreg
 
